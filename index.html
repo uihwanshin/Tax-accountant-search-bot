@@ -58,6 +58,32 @@
   select:focus,.text-input:focus{border-color:var(--primary);}
   .text-input::placeholder{color:#aaa;}
 
+  /* 커스텀 searchable select */
+  .custom-select-wrap{position:relative;width:100%;}
+  .custom-select-input{
+    width:100%;padding:10px 12px;font-size:14px;
+    font-family:'Noto Sans KR',sans-serif;
+    border:1.5px solid var(--border-strong);
+    border-radius:var(--radius-sm);
+    background:var(--bg);color:var(--text);
+    outline:none;transition:border-color 0.15s;
+  }
+  .custom-select-input:focus{border-color:var(--primary);}
+  .custom-select-input::placeholder{color:#aaa;}
+  .custom-select-input:disabled{opacity:0.45;cursor:not-allowed;}
+  .custom-select-drop{
+    display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;
+    background:var(--card);border:1.5px solid var(--primary);
+    border-radius:var(--radius-sm);z-index:200;
+    max-height:220px;overflow-y:auto;
+    box-shadow:0 4px 16px rgba(0,0,0,0.12);
+  }
+  .custom-opt{
+    padding:9px 12px;font-size:14px;cursor:pointer;
+    color:var(--text);transition:background 0.1s;
+  }
+  .custom-opt:hover,.custom-opt.focused{background:var(--primary-light);color:var(--primary);}
+
   /* SR 체크박스 */
   .checkbox-row{display:flex;align-items:center;gap:0;}
   .checkbox-label{
@@ -192,21 +218,34 @@
       <!-- 시/도 -->
       <div class="filter-group">
         <label class="filter-label">📍 시 · 도 <span class="opt">(선택)</span></label>
-        <select id="selRegion" onchange="updateDistricts()">
-          <option value="">전체</option>
-          <option>서울</option><option>경기</option><option>인천</option>
-          <option>부산</option><option>대구</option><option>울산</option>
-          <option>대전</option><option>광주</option><option>강원</option>
-          <option>충청</option><option>전라</option><option>경상</option><option>제주</option>
-        </select>
+        <div class="custom-select-wrap" id="regionWrap">
+          <input class="custom-select-input" id="selRegionInput" type="text"
+            placeholder="전체 (입력 또는 스크롤)"
+            autocomplete="off"
+            oninput="filterRegionOptions(this.value)"
+            onfocus="openRegionDrop()"
+            onkeydown="regionKeyNav(event)"
+          />
+          <div class="custom-select-drop" id="regionDrop"></div>
+          <input type="hidden" id="selRegion" value="">
+        </div>
       </div>
 
       <!-- 시/군/구 -->
       <div class="filter-group">
         <label class="filter-label">📍 시 · 군 · 구 <span class="opt">(선택)</span></label>
-        <select id="selDistrict">
-          <option value="">전체</option>
-        </select>
+        <div class="custom-select-wrap" id="districtWrap">
+          <input class="custom-select-input" id="selDistrictInput" type="text"
+            placeholder="전체 (시/도 선택 후 입력)"
+            autocomplete="off"
+            oninput="filterDistrictOptions(this.value)"
+            onfocus="openDistrictDrop()"
+            onkeydown="districtKeyNav(event)"
+            disabled
+          />
+          <div class="custom-select-drop" id="districtDrop"></div>
+          <input type="hidden" id="selDistrict" value="">
+        </div>
       </div>
 
       <!-- 사업자 유형 -->
@@ -254,33 +293,166 @@ let TAX_DATA = [];
 let adminOpen = false;
 
 // ── 시/도별 시군구 ────────────────────────────────────────
+const REGIONS_LIST = [
+  "서울","경기","인천","부산","대구","울산","대전","광주","세종","강원",
+  "충청남도","충청북도","전라남도","전라북도","경상남도","경상북도","제주"
+];
+
 const DISTRICTS = {
   "서울":["강남구","강동구","강북구","강서구","관악구","광진구","구로구","금천구","노원구","도봉구","동대문구","동작구","마포구","서대문구","서초구","성동구","성북구","송파구","양천구","영등포구","용산구","은평구","종로구","중구","중랑구"],
-  "경기":["가평군","고양시","과천시","광명시","광주시","구리시","군포시","김포시","남양주시","동두천시","부천시","성남시","수원시","시흥시","안산시","안성시","안양시","양주시","양평군","여주시","연천군","오산시","용인시","의왕시","의정부시","이천시","파주시","평택시","포천시","하남시","화성시"],
+  "경기":["가평군","고양시","과천시","광명시","광주시","구리시","군포시","김포시","남양주시","동두천시","부천시","성남시","수원시","시흥시","안산시","안양시","양주시","양평군","여주시","연천군","오산시","용인시","의왕시","의정부시","이천시","파주시","평택시","포천시","하남시","화성시"],
   "인천":["강화군","계양구","남동구","동구","미추홀구","부평구","서구","연수구","옹진군","중구"],
   "부산":["강서구","금정구","기장군","남구","동구","동래구","부산진구","북구","사상구","사하구","서구","수영구","연제구","영도구","중구","해운대구"],
   "대구":["군위군","남구","달서구","달성군","동구","북구","서구","수성구","중구"],
   "울산":["남구","동구","북구","울주군","중구"],
   "대전":["대덕구","동구","서구","유성구","중구"],
   "광주":["광산구","남구","동구","북구","서구"],
+  "세종":["세종시"],
   "강원":["강릉시","고성군","동해시","삼척시","속초시","양구군","양양군","영월군","원주시","인제군","정선군","철원군","춘천시","태백시","평창군","홍천군","화천군","횡성군"],
-  "충청":["계룡시","공주시","금산군","논산시","당진시","보령시","보은군","부여군","서산시","서천군","세종시","아산시","옥천군","영동군","예산군","증평군","진천군","청양군","청주시","천안시","충주시","태안군","홍성군"],
-  "전라":["고창군","고흥군","곡성군","광양시","구례군","군산시","김제시","나주시","남원시","담양군","무안군","무주군","보성군","부안군","순창군","순천시","신안군","여수시","영광군","영암군","완도군","완주군","익산시","임실군","장성군","장수군","장흥군","전주시","정읍시","진안군","진도군","함평군","해남군","화순군"],
-  "경상":["거제시","거창군","경산시","경주시","고령군","고성군","구미시","김천시","김해시","남해군","밀양시","봉화군","산청군","상주시","성주군","안동시","양산시","영덕군","영양군","영주시","영천시","예천군","울릉군","울진군","의령군","의성군","청도군","청송군","칠곡군","창녕군","창원시","통영시","포항시","하동군","함안군","함양군","합천군"],
+  "충청남도":["공주시","금산군","논산시","당진시","보령시","부여군","서산시","서천군","아산시","예산군","청양군","천안시","태안군","홍성군","계룡시"],
+  "충청북도":["보은군","옥천군","영동군","증평군","진천군","괴산군","음성군","청주시","충주시","제천시","단양군"],
+  "전라남도":["고흥군","곡성군","광양시","구례군","나주시","담양군","무안군","보성군","순천시","신안군","여수시","영광군","영암군","완도군","장성군","장흥군","진도군","함평군","해남군","화순군"],
+  "전라북도":["고창군","군산시","김제시","남원시","무주군","부안군","순창군","완주군","익산시","임실군","장수군","전주시","정읍시","진안군"],
+  "경상남도":["거제시","거창군","고성군","김해시","남해군","밀양시","사천시","산청군","양산시","의령군","진주시","창녕군","창원시","통영시","하동군","함안군","함양군","합천군"],
+  "경상북도":["경산시","경주시","고령군","구미시","김천시","문경시","봉화군","상주시","성주군","안동시","영덕군","영양군","영주시","영천시","예천군","울릉군","울진군","의성군","청도군","청송군","칠곡군","포항시"],
   "제주":["서귀포시","제주시"],
-};
+}
 
-function updateDistricts() {
-  const region = document.getElementById("selRegion").value;
-  const sel = document.getElementById("selDistrict");
-  sel.innerHTML = '<option value="">전체</option>';
-  if (region && DISTRICTS[region]) {
-    DISTRICTS[region].forEach(d => {
-      const opt = document.createElement("option");
-      opt.value = d; opt.textContent = d; sel.appendChild(opt);
-    });
+// ── 커스텀 searchable select ──────────────────────────────
+let regionFocusIdx = -1;
+let districtFocusIdx = -1;
+
+function openRegionDrop() {
+  filterRegionOptions(document.getElementById("selRegionInput").value);
+}
+
+function filterRegionOptions(q) {
+  const drop = document.getElementById("regionDrop");
+  const filtered = q ? REGIONS_LIST.filter(r => r.includes(q)) : REGIONS_LIST;
+  drop.innerHTML = "";
+  // 전체 옵션
+  const all = makeOpt("", "전체", "region");
+  drop.appendChild(all);
+  filtered.forEach(r => drop.appendChild(makeOpt(r, r, "region")));
+  drop.style.display = filtered.length || !q ? "block" : "none";
+  regionFocusIdx = -1;
+}
+
+function makeOpt(val, label, type) {
+  const div = document.createElement("div");
+  div.className = "custom-opt";
+  div.textContent = label;
+  div.onmousedown = e => { e.preventDefault(); selectRegionOpt(val, label); };
+  return div;
+}
+
+function selectRegionOpt(val, label) {
+  document.getElementById("selRegion").value = val;
+  document.getElementById("selRegionInput").value = label === "전체" ? "" : label;
+  document.getElementById("regionDrop").style.display = "none";
+  updateDistricts(val);
+}
+
+function regionKeyNav(e) {
+  const drop = document.getElementById("regionDrop");
+  const opts = drop.querySelectorAll(".custom-opt");
+  if (!opts.length) return;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    regionFocusIdx = Math.min(regionFocusIdx + 1, opts.length - 1);
+    opts.forEach((o,i) => o.classList.toggle("focused", i === regionFocusIdx));
+    opts[regionFocusIdx].scrollIntoView({block:"nearest"});
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    regionFocusIdx = Math.max(regionFocusIdx - 1, 0);
+    opts.forEach((o,i) => o.classList.toggle("focused", i === regionFocusIdx));
+    opts[regionFocusIdx].scrollIntoView({block:"nearest"});
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (regionFocusIdx >= 0 && opts[regionFocusIdx]) {
+      opts[regionFocusIdx].onmousedown(e);
+    } else if (opts.length > 0) {
+      opts[0].onmousedown(e);
+    }
+  } else if (e.key === "Escape") {
+    drop.style.display = "none";
   }
 }
+
+// 시/군/구
+function openDistrictDrop() {
+  filterDistrictOptions(document.getElementById("selDistrictInput").value);
+}
+
+function filterDistrictOptions(q) {
+  const region = document.getElementById("selRegion").value;
+  if (!region) return;
+  const list = DISTRICTS[region] || [];
+  const drop = document.getElementById("districtDrop");
+  const filtered = q ? list.filter(d => d.includes(q)) : list;
+  drop.innerHTML = "";
+  const all = document.createElement("div");
+  all.className = "custom-opt";
+  all.textContent = "전체";
+  all.onmousedown = e => { e.preventDefault(); selectDistrictOpt("", "전체"); };
+  drop.appendChild(all);
+  filtered.forEach(d => {
+    const div = document.createElement("div");
+    div.className = "custom-opt";
+    div.textContent = d;
+    div.onmousedown = ev => { ev.preventDefault(); selectDistrictOpt(d, d); };
+    drop.appendChild(div);
+  });
+  drop.style.display = "block";
+  districtFocusIdx = -1;
+}
+
+function selectDistrictOpt(val, label) {
+  document.getElementById("selDistrict").value = val;
+  document.getElementById("selDistrictInput").value = label === "전체" ? "" : label;
+  document.getElementById("districtDrop").style.display = "none";
+}
+
+function districtKeyNav(e) {
+  const drop = document.getElementById("districtDrop");
+  const opts = drop.querySelectorAll(".custom-opt");
+  if (!opts.length) return;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    districtFocusIdx = Math.min(districtFocusIdx + 1, opts.length - 1);
+    opts.forEach((o,i) => o.classList.toggle("focused", i === districtFocusIdx));
+    opts[districtFocusIdx].scrollIntoView({block:"nearest"});
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    districtFocusIdx = Math.max(districtFocusIdx - 1, 0);
+    opts.forEach((o,i) => o.classList.toggle("focused", i === districtFocusIdx));
+    opts[districtFocusIdx].scrollIntoView({block:"nearest"});
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (districtFocusIdx >= 0 && opts[districtFocusIdx]) {
+      opts[districtFocusIdx].onmousedown(e);
+    } else if (opts.length > 0) {
+      opts[0].onmousedown(e);
+    }
+  } else if (e.key === "Escape") {
+    drop.style.display = "none";
+  }
+}
+
+function updateDistricts(region) {
+  const inp = document.getElementById("selDistrictInput");
+  const hid = document.getElementById("selDistrict");
+  const drop = document.getElementById("districtDrop");
+  inp.value = ""; hid.value = ""; drop.style.display = "none";
+  inp.disabled = !region;
+  inp.placeholder = region ? "전체 (입력 또는 스크롤)" : "시/도를 먼저 선택하세요";
+}
+
+// 드롭다운 외부 클릭 시 닫기
+document.addEventListener("click", e => {
+  if (!e.target.closest("#regionWrap"))   document.getElementById("regionDrop").style.display = "none";
+  if (!e.target.closest("#districtWrap")) document.getElementById("districtDrop").style.display = "none";
+});
 
 // ── 관리자 ───────────────────────────────────────────────
 function toggleAdmin() {
@@ -385,8 +557,10 @@ function parseRow(r) {
 const SEARCH_COORDS = {
   "서울":[37.5665,126.9780],"경기":[37.4138,127.5183],"인천":[37.4563,126.7052],
   "부산":[35.1796,129.0756],"대구":[35.8714,128.6014],"울산":[35.5384,129.3114],
-  "대전":[36.3504,127.3845],"광주":[35.1595,126.8526],
-  "충청":[36.6588,127.2000],"전라":[35.7175,127.1530],"경상":[35.6000,128.2000],
+  "대전":[36.3504,127.3845],"광주":[35.1595,126.8526],"세종":[36.4800,127.2890],
+  "충청":[36.6588,127.2000],"충청남도":[36.5184,126.8000],"충청북도":[36.9910,127.9290],
+  "전라":[35.7175,127.1530],"전라남도":[34.8679,126.9910],"전라북도":[35.7175,127.1530],
+  "경상":[35.6000,128.2000],"경상남도":[35.4606,128.2132],"경상북도":[36.4919,128.8889],
   "강원":[37.8813,127.7300],"제주":[33.4890,126.4983],
   "가평군":[37.8314,127.5100],"고양시":[37.6584,126.8320],"과천시":[37.4292,126.9877],
   "광명시":[37.4789,126.8647],"광주시":[37.4295,127.2559],"구리시":[37.5943,127.1296],
@@ -461,38 +635,49 @@ function doSearch() {
                     || null;
 
   const candidates = TAX_DATA.map(t => {
-    // SR 필터
     if (srOnly && !t.sr) return null;
-    // 사업자 유형 필터
     if (biz === "개인" && (t.individual === null || t.individual < 0)) return null;
     if (biz === "법인" && (t.corporate === null || t.corporate < 0)) return null;
 
-    // 업종 필터 (필수)
-    let matchCount = 0;
-    const ok = (t.industries_ok+" "+t.specialty).toLowerCase();
-    const no = (t.industries_no||"").toLowerCase();
+    const ok  = (t.industries_ok + " " + t.specialty).toLowerCase().trim();
+    const no  = (t.industries_no || "").toLowerCase().trim();
+    const hasData = ok.length > 0 || no.length > 0;
+
+    // 불가능 업종이면 완전 제외
     for (const ind of industries) {
-      const kw = ind.toLowerCase();
-      if (no.includes(kw)) return null; // 불가능 업종이면 제외
-      if (!ok.trim() || ok.includes(kw)) matchCount++;
+      if (no.includes(ind.toLowerCase())) return null;
     }
 
-    // 거리 계산
-    let tLat=t.lat, tLng=t.lng;
-    if (!tLat||!tLng) { const e=coordFromAddress(t.address); if(e){tLat=e[0];tLng=e[1];} }
-    const distKm = !searchCoord ? 0 : (tLat&&tLng ? haversine(searchCoord[0],searchCoord[1],tLat,tLng) : 9999);
+    // 가능 업종 매칭 수
+    let matchCount = 0;
+    if (hasData) {
+      for (const ind of industries) {
+        if (ok.includes(ind.toLowerCase())) matchCount++;
+      }
+    }
+    // 업종 데이터 없거나 가능 업종에도 매칭 없으면 → 관리팀 확인 필요
+    const needsCheck = !hasData || matchCount === 0;
 
-    return {...t, matchCount, distKm};
+    let tLat = t.lat, tLng = t.lng;
+    if (!tLat || !tLng) { const e = coordFromAddress(t.address); if (e) { tLat=e[0]; tLng=e[1]; } }
+    const distKm = !searchCoord ? 0 : (tLat && tLng ? haversine(searchCoord[0],searchCoord[1],tLat,tLng) : 9999);
+
+    // 4단계 tier
+    // tier1: 수임가능 + 업종매칭
+    // tier2: 수임가능 + 관리팀확인
+    // tier3: 수임불가 + 업종매칭
+    // tier4: 수임불가 + 관리팀확인
+    const avail = t.available === "가능";
+    const tier = avail && !needsCheck ? 1
+               : avail &&  needsCheck ? 2
+               : !avail && !needsCheck ? 3
+               : 4;
+
+    return { ...t, matchCount, distKm, needsCheck, tier };
   }).filter(Boolean);
 
-  // 정렬: 1)수임가능 2)업종매칭수 3)거리
-  candidates.sort((a,b) => {
-    const aA=a.available==="가능"?2:a.available==="unknown"?1:0;
-    const bA=b.available==="가능"?2:b.available==="unknown"?1:0;
-    if (bA!==aA) return bA-aA;
-    if (b.matchCount!==a.matchCount) return b.matchCount-a.matchCount;
-    return a.distKm-b.distKm;
-  });
+  // 정렬: tier → 거리
+  candidates.sort((a, b) => a.tier !== b.tier ? a.tier - b.tier : a.distKm - b.distKm);
 
   renderResults(candidates, { region, district, biz, srOnly, industries, searchCoord });
 }
@@ -503,65 +688,97 @@ function capInfo(t, biz) {
   if (biz==="법인") return t.corporate!==null?`법인 잔여 ${t.corporate}건`:null;
   const p=[];
   if (t.individual!==null) p.push(`개인 ${t.individual}건`);
-  if (t.corporate!==null) p.push(`법인 ${t.corporate}건`);
-  return p.length?"잔여: "+p.join(" / "):null;
+  if (t.corporate!==null)  p.push(`법인 ${t.corporate}건`);
+  return p.length ? "잔여: "+p.join(" / ") : null;
 }
 
 function renderResults(list, q) {
   const el = document.getElementById("results");
   let tags = "";
-  if (q.region)    tags+=`<span class="tag" style="background:#E6F1FB;color:#185FA5">📍 ${q.region}${q.district?" "+q.district:""}</span>`;
+  if (q.region)            tags+=`<span class="tag" style="background:#E6F1FB;color:#185FA5">📍 ${q.region}${q.district?" "+q.district:""}</span>`;
   if (q.industries.length) tags+=`<span class="tag" style="background:#E1F5EE;color:#0F6E56">🏭 ${q.industries.join(", ")}</span>`;
-  if (q.biz)       tags+=`<span class="tag" style="background:#EEEDFE;color:#3C3489">🏢 ${q.biz==="개인"?"개인사업자":"법인사업자"}</span>`;
-  if (q.srOnly)    tags+=`<span class="tag" style="background:#E6F1FB;color:#185FA5">SR수임</span>`;
+  if (q.biz)               tags+=`<span class="tag" style="background:#EEEDFE;color:#3C3489">🏢 ${q.biz==="개인"?"개인사업자":"법인사업자"}</span>`;
+  if (q.srOnly)            tags+=`<span class="tag" style="background:#E6F1FB;color:#185FA5">SR수임</span>`;
 
   if (!list.length) {
     el.innerHTML=`<div class="result-header">${tags}</div><div class="empty-state">조건에 맞는 세무사가 없습니다.<br><span style="font-size:13px;margin-top:6px;display:block">업종명을 다르게 입력하거나 지역 조건을 넓혀보세요.</span></div>`;
     return;
   }
 
-  let html=`<div class="result-header">${tags}<span class="result-count">— <strong>${list.length}명</strong> 매칭</span></div>`;
+  const TIER_LABELS = {
+    1: null,
+    2: { text:"관리팀 확인 필요 (수임 가능)", bg:"#FAEEDA", col:"#854F0B" },
+    3: { text:"수임 불가 — 업종 매칭", bg:"#F1EFE8", col:"#5F5E5A" },
+    4: { text:"관리팀 확인 필요 (수임 불가)", bg:"#F1EFE8", col:"#5F5E5A" },
+  };
+
+  let html = `<div class="result-header">${tags}<span class="result-count">— <strong>${list.length}명</strong> 매칭</span></div>`;
+  let lastTier = 0;
 
   list.forEach(t => {
-    const avail=t.available==="가능", unk=t.available==="unknown";
-    const sBg=avail?"#E1F5EE":unk?"#F1EFE8":"#FAECE7";
-    const sCol=avail?"#0F6E56":unk?"#5F5E5A":"#993C1D";
-    const sLbl=avail?"수임 가능":unk?"확인 필요":"수임 불가";
-    const cap=capInfo(t,q.biz);
-
-    let distBadge="";
-    if (q.searchCoord && t.distKm<9999) {
-      const km=Math.round(t.distKm);
-      const dBg=km<50?"#E1F5EE":km<150?"#E6F1FB":km<300?"#FAEEDA":"#FAECE7";
-      const dCol=km<50?"#0F6E56":km<150?"#185FA5":km<300?"#854F0B":"#993C1D";
-      distBadge=`<span class="tag" style="background:${dBg};color:${dCol};font-size:11px">📏 ${km}km</span>`;
+    if (t.tier !== lastTier) {
+      lastTier = t.tier;
+      const lbl = TIER_LABELS[t.tier];
+      if (lbl) {
+        html += `<div style="display:flex;align-items:center;gap:8px;margin:18px 0 10px;">
+          <span style="font-size:12px;font-weight:700;padding:3px 12px;border-radius:20px;background:${lbl.bg};color:${lbl.col}">${lbl.text}</span>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+        </div>`;
+      }
     }
 
-    html+=`<div class="card${avail?" available":""}">`;
-    html+=`<div class="card-top"><div class="card-left">`;
-    html+=`<div class="avatar ${avail?"avail":"unavail"}">${t.name.charAt(0)}</div>`;
-    html+=`<div><div class="card-name">${t.name} 세무사</div>`;
-    html+=`<div class="card-firm">${t.firm}</div>`;
-    html+=`<div class="card-badges">`;
-    if (t.sr) html+=`<span class="tag" style="background:#E6F1FB;color:#185FA5;font-size:11px">SR</span>`;
-    html+=distBadge;
-    html+=`</div></div></div>`;
-    html+=`<div class="card-right"><span class="badge-status" style="background:${sBg};color:${sCol}">${sLbl}</span>`;
-    if (cap) html+=`<span class="cap-text">${cap}</span>`;
-    html+=`</div></div>`;
-    html+=`<div class="card-info">`;
-    if (t.address) html+=`<div class="card-info-row"><span>📍</span><span>${t.address}</span></div>`;
-    if (t.phone&&t.phone!=="-") html+=`<div class="card-info-row"><span>📞</span><span>${t.phone.split("\n")[0]}</span></div>`;
-    html+=`</div>`;
-    if (t.matchCount>0&&t.industries_ok) {
-      const prev=t.industries_ok.slice(0,120)+(t.industries_ok.length>120?"…":"");
-      html+=`<div class="match-box"><strong>✓ 업종 매칭 (${t.matchCount}/${q.industries.length})</strong> — ${prev}</div>`;
+    const avail = t.available === "가능";
+    const cap = capInfo(t, q.biz);
+
+    let sBg, sCol, sLbl;
+    if (t.needsCheck) {
+      sBg="#FAEEDA"; sCol="#854F0B"; sLbl="관리팀 확인 필요";
+    } else if (avail) {
+      sBg="#E1F5EE"; sCol="#0F6E56"; sLbl="수임 가능";
+    } else {
+      sBg="#FAECE7"; sCol="#993C1D"; sLbl="수임 불가";
     }
-    if (t.notes) html+=`<div class="note-box">⚠️ ${t.notes.trim()}</div>`;
-    html+=`</div>`;
+
+    let distBadge = "";
+    if (q.searchCoord && t.distKm < 9999) {
+      const km = Math.round(t.distKm);
+      const dBg = km<50?"#E1F5EE":km<150?"#E6F1FB":km<300?"#FAEEDA":"#FAECE7";
+      const dCol= km<50?"#0F6E56":km<150?"#185FA5":km<300?"#854F0B":"#993C1D";
+      distBadge = `<span class="tag" style="background:${dBg};color:${dCol};font-size:11px">📏 ${km}km</span>`;
+    }
+
+    const borderStyle = avail && !t.needsCheck ? "border:1.5px solid var(--primary-mid)" : "border:1px solid var(--border)";
+    const avatarCls = avail && !t.needsCheck ? "avail" : "unavail";
+
+    html += `<div class="card" style="${borderStyle}">`;
+    html += `<div class="card-top"><div class="card-left">`;
+    html += `<div class="avatar ${avatarCls}">${t.name.charAt(0)}</div>`;
+    html += `<div><div class="card-name">${t.name} 세무사</div>`;
+    html += `<div class="card-firm">${t.firm}</div>`;
+    html += `<div class="card-badges">`;
+    if (t.sr) html += `<span class="tag" style="background:#E6F1FB;color:#185FA5;font-size:11px">SR</span>`;
+    html += distBadge;
+    html += `</div></div></div>`;
+    html += `<div class="card-right">`;
+    html += `<span class="badge-status" style="background:${sBg};color:${sCol}">${sLbl}</span>`;
+    if (cap) html += `<span class="cap-text">${cap}</span>`;
+    html += `</div></div>`;
+    html += `<div class="card-info">`;
+    if (t.address) html += `<div class="card-info-row"><span>📍</span><span>${t.address}</span></div>`;
+    if (t.phone && t.phone !== "-") html += `<div class="card-info-row"><span>📞</span><span>${t.phone.split("\n")[0]}</span></div>`;
+    html += `</div>`;
+    if (!t.needsCheck && t.matchCount > 0 && t.industries_ok) {
+      const prev = t.industries_ok.slice(0,120)+(t.industries_ok.length>120?"…":"");
+      html += `<div class="match-box"><strong>✓ 업종 매칭 (${t.matchCount}/${q.industries.length})</strong> — ${prev}</div>`;
+    }
+    if (t.needsCheck) {
+      html += `<div class="match-box" style="background:var(--warn-light);color:var(--warn)">📋 해당 업종 수임 가능 여부를 관리팀에 확인해주세요.</div>`;
+    }
+    if (t.notes) html += `<div class="note-box">⚠️ ${t.notes.trim()}</div>`;
+    html += `</div>`;
   });
 
-  el.innerHTML=html;
+  el.innerHTML = html;
 }
 
 document.getElementById("searchInput").addEventListener("keydown", e=>{ if(e.key==="Enter") doSearch(); });
