@@ -226,6 +226,28 @@
 </head>
 <body>
 
+<!-- 비밀번호 잠금 화면 -->
+<div id="lockScreen" style="display:none;position:fixed;inset:0;background:#f8f8f6;z-index:9999;display:flex;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;border:1px solid rgba(0,0,0,0.1);padding:40px 36px;width:100%;max-width:380px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+    <div style="font-size:28px;margin-bottom:12px">🔐</div>
+    <div style="font-size:18px;font-weight:700;color:#1a1a1a;margin-bottom:6px">세무사 배정 시스템</div>
+    <div style="font-size:13px;color:#6b6b6b;margin-bottom:24px">접속하려면 비밀번호를 입력해주세요.</div>
+    <input id="lockInput" type="password"
+      placeholder="비밀번호 입력"
+      style="width:100%;padding:12px 14px;font-size:15px;font-family:'Noto Sans KR',sans-serif;border:1.5px solid rgba(0,0,0,0.2);border-radius:8px;outline:none;margin-bottom:10px;text-align:center;letter-spacing:2px;"
+      onkeydown="if(event.key==='Enter') checkPassword()"
+    />
+    <div id="lockError" style="font-size:12px;color:#993C1D;margin-bottom:10px;display:none;">⚠️ 비밀번호가 올바르지 않습니다.</div>
+    <button onclick="checkPassword()"
+      style="width:100%;padding:12px;font-size:15px;font-weight:700;font-family:'Noto Sans KR',sans-serif;background:#0F6E56;color:#fff;border:none;border-radius:8px;cursor:pointer;">
+      입력
+    </button>
+  </div>
+</div>
+
+<!-- 본문 (잠금 해제 후 표시) -->
+<div id="mainContent" style="display:none;">
+
 <header>
   <div class="header-inner">
     <div class="logo">SAVETAX<span> 세무사 배정</span></div>
@@ -882,6 +904,18 @@ function getRemaining(t) {
   return { remInd, remCorp, usedInd, usedCorp };
 }
 
+// ── 이름 + 직함 포맷 ─────────────────────────────────────
+const ACCOUNTANTS   = ["이범기", "정준"];       // 회계사
+const NO_TITLE      = ["선영회계법인"];          // 직함 없음
+const DISPLAY_NAMES = { "선영회계법인": "선영회계법인 본점" }; // 표시 이름 변경
+
+function formatName(t) {
+  const displayName = DISPLAY_NAMES[t.name] || t.name;
+  if (NO_TITLE.includes(t.name))       return displayName;           // 직함 없음
+  if (ACCOUNTANTS.includes(t.name))    return `${displayName} 회계사`;
+  return `${displayName} 세무사`;
+}
+
 function capInfo(t, biz) {
   const { remInd, remCorp } = getRemaining(t);
   if (biz==="개인") {
@@ -959,8 +993,8 @@ function renderResults(list, q) {
 
     html += `<div class="card" style="${borderStyle}">`;
     html += `<div class="card-top"><div class="card-left">`;
-    html += `<div class="avatar ${avatarCls}">${t.name.charAt(0)}</div>`;
-    html += `<div><div class="card-name">${t.name} 세무사</div>`;
+    html += `<div class="avatar ${avatarCls}">${(BRANCH_NAMES[t.name]||t.name).charAt(0)}</div>`;
+    html += `<div><div class="card-name">${formatName(t)}</div>`;
     html += `<div class="card-firm">${t.firm}</div>`;
     html += `<div class="card-badges">`;
     if (t.sr) html += `<span class="tag" style="background:#E6F1FB;color:#185FA5;font-size:11px">SR</span>`;
@@ -997,7 +1031,7 @@ function renderResults(list, q) {
 }
 
 document.getElementById("searchInput").addEventListener("keydown", e=>{ if(e.key==="Enter") doSearch(); });
-loadData();
+// loadData와 scheduleAutoRefresh는 잠금 해제 후 호출됨
 
 // ── 자동 갱신 (업무시간 9~19시, 30분 간격) ───────────────
 function scheduleAutoRefresh() {
@@ -1210,12 +1244,47 @@ function makeDashCard(t, status) {
   const srBadge = t.sr ? `<span class="tag" style="background:#E6F1FB;color:#185FA5;font-size:10px;margin-left:4px">SR</span>` : "";
 
   return `<div class="dash-card" style="${cardBorder}">
-    <div class="dash-name">${t.name} 세무사${srBadge}</div>
+    <div class="dash-name">${formatName(t)}${srBadge}</div>
     <div style="font-size:11px;color:var(--text-sub);margin-bottom:10px">${t.firm}</div>
     <div style="font-size:10px;color:var(--text-sub);margin-bottom:5px;font-weight:600;letter-spacing:0.3px">최대 수임 / 현재 계약 (잔여)</div>
     ${rows}
   </div>`;
 }
 </script>
+</div><!-- /mainContent -->
+
+<script>
+// ── 비밀번호 잠금 ─────────────────────────────────────────
+const LOCK_KEY = "semusa_auth_v1";
+const LOCK_PW  = "unitblack26@!";
+
+function checkPassword() {
+  const val = document.getElementById("lockInput").value;
+  if (val === LOCK_PW) {
+    sessionStorage.setItem(LOCK_KEY, "1");
+    document.getElementById("lockScreen").style.display = "none";
+    document.getElementById("mainContent").style.display = "block";
+    loadData();
+    initTokenUI();
+    scheduleAutoRefresh();
+  } else {
+    document.getElementById("lockError").style.display = "block";
+    document.getElementById("lockInput").value = "";
+    document.getElementById("lockInput").focus();
+  }
+}
+
+// 페이지 로드 시 인증 확인
+(function() {
+  if (sessionStorage.getItem(LOCK_KEY) === "1") {
+    document.getElementById("lockScreen").style.display = "none";
+    document.getElementById("mainContent").style.display = "block";
+  } else {
+    document.getElementById("lockScreen").style.display = "flex";
+    document.getElementById("mainContent").style.display = "none";
+  }
+})();
+</script>
+
 </body>
 </html>
