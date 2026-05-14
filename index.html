@@ -385,9 +385,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQxPoON_qWplhsQpChFTxqAOVA-EgqIP5qpJ3jq6Y3pB3-Nj70DLXJ7QUtm8OuDNOZoFha97URx-VK6/pub?gid=0&single=true&output=csv";
-const LS_KEY       = "semusa_data_v1";
-const LS_META      = "semusa_meta_v1";
-const LS_CONTRACT  = "semusa_contract_v1"; // Airtable 계약 현황 캐시
+// 날짜 기반 캐시 키 — 날짜가 바뀌면 자동으로 캐시 무효화
+const TODAY        = new Date().toISOString().slice(0,10); // "2026-05-14"
+const LS_KEY       = `semusa_data_${TODAY}`;
+const LS_META      = `semusa_meta_${TODAY}`;
+const LS_CONTRACT  = "semusa_contract_v1"; // Airtable는 실시간이라 날짜 무관
 const WORKER_URL   = "https://savetax-airtable-proxy.suh-204.workers.dev/airtable";
 let TAX_DATA       = [];
 let CONTRACT_MAP   = {}; // { "지점명": { individual: N, corporate: N } }
@@ -597,6 +599,12 @@ async function loadSheets() {
       const meta = { updatedAt: new Date().toISOString(), count: parsed.length, source: "Google Sheets" };
       localStorage.setItem(LS_KEY, JSON.stringify(parsed));
       localStorage.setItem(LS_META, JSON.stringify(meta));
+      // 이전 날짜 캐시 자동 정리
+      Object.keys(localStorage).forEach(k => {
+        if ((k.startsWith("semusa_data_") || k.startsWith("semusa_meta_")) && !k.includes(TODAY)) {
+          localStorage.removeItem(k);
+        }
+      });
     } else {
       localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_META);
     }
@@ -990,6 +998,21 @@ function renderResults(list, q) {
 
 document.getElementById("searchInput").addEventListener("keydown", e=>{ if(e.key==="Enter") doSearch(); });
 loadData();
+
+// ── 자동 갱신 (업무시간 9~19시, 30분 간격) ───────────────
+function scheduleAutoRefresh() {
+  setInterval(() => {
+    const h = new Date().getHours();
+    if (h >= 9 && h < 19) {
+      loadData();
+      // 배정현황 탭이 열려있으면 대시보드도 갱신
+      if (document.getElementById("tab-dashboard")?.classList.contains("active")) {
+        renderDashboard();
+      }
+    }
+  }, 30 * 60 * 1000); // 30분 간격
+}
+scheduleAutoRefresh();
 
 // ── 탭 전환 ──────────────────────────────────────────────
 function switchTab(name, btn) {
