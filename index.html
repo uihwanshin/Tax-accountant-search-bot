@@ -554,7 +554,7 @@ async function loadAirtable() {
     let allRecords = [];
     let offset = null;
     do {
-      let url = `https://api.airtable.com/v0/${AT_BASE}/${AT_TABLE}?view=${AT_VIEW}&pageSize=100&fields%5B%5D=%EC%A7%80%EC%A0%90%EB%AA%85&fields%5B%5D=%EC%82%AC%EC%97%85%EC%9E%90%EC%9C%A0%ED%98%95`;
+      let url = `https://api.airtable.com/v0/${AT_BASE}/${AT_TABLE}?view=${AT_VIEW}&pageSize=100&fields%5B%5D=%EC%A7%80%EC%A0%90%EB%AA%85(slack)&fields%5B%5D=%EC%82%AC%EC%97%85%EC%9E%90%EC%9C%A0%ED%98%95`;
       if (offset) url += `&offset=${encodeURIComponent(offset)}`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${getToken()}` }
@@ -568,7 +568,7 @@ async function loadAirtable() {
     // 지점명별 개인/법인 계약 수 집계
     const map = {};
     allRecords.forEach(rec => {
-      const branch  = String(rec.fields["지점명"]    || "").trim();
+      const branch  = String(rec.fields["지점명(slack)"] || rec.fields["지점명"] || "").trim();
       const bizType = String(rec.fields["사업자유형"] || "").trim();
       if (!branch) return;
       if (!map[branch]) map[branch] = { individual: 0, corporate: 0 };
@@ -650,6 +650,7 @@ function parseRow(r) {
   return {
     name:String(r["★이름"]||"").trim(),
     firm:String(r["★상호"]||r["지점명(slack)"]||"").trim(),
+    branch:String(r["지점명(slack)"]||"").trim(),
     address:String(r["사업장 주소"]||r["◆사업장 주소"]||"").trim(),
     phone:String(r["★연락처"]||"").trim(),
     available,sr,
