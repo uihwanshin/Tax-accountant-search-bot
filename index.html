@@ -165,6 +165,30 @@
   .spinner{display:inline-block;width:13px;height:13px;border:2px solid var(--border-strong);border-top-color:var(--text-sub);border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:5px;}
   @keyframes spin{to{transform:rotate(360deg);}}
 
+  /* 탭 */
+  .tab-bar{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px;}
+  .tab-btn{padding:10px 20px;font-size:14px;font-weight:500;font-family:'Noto Sans KR',sans-serif;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;cursor:pointer;color:var(--text-sub);transition:all 0.15s;}
+  .tab-btn:hover{color:var(--text);}
+  .tab-btn.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:700;}
+  .tab-content{display:none;}
+  .tab-content.active{display:block;}
+
+  /* 배정 현황판 */
+  .dashboard-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
+  .dash-card{background:var(--card);border-radius:var(--radius);border:1px solid var(--border);padding:14px 16px;}
+  .dash-card.ok{border-color:var(--primary-mid);border-width:1.5px;}
+  .dash-card.full{border-color:#F9A8A8;border-width:1.5px;background:#FFF8F8;}
+  .dash-name{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;}
+  .dash-row{display:flex;align-items:center;justify-content:space-between;font-size:13px;padding:3px 0;}
+  .dash-label{color:var(--text-sub);}
+  .dash-count{font-weight:700;}
+  .dash-count.ok{color:var(--primary);}
+  .dash-count.full{color:var(--danger);}
+  .dash-badge{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:700;margin-top:8px;display:inline-block;}
+  .dash-badge.ok{background:var(--primary-light);color:var(--primary);}
+  .dash-badge.full{background:#FAECE7;color:var(--danger);}
+  .dash-badge.partial{background:#FAEEDA;color:var(--warn);}
+
   @media(max-width:480px){
     main{padding:16px 14px 60px;}
     .search-box{padding:16px;}
@@ -172,6 +196,7 @@
     .filter-full{grid-column:1;}
     .card{padding:14px;}
     .card-name{font-size:15px;}
+    .dashboard-grid{grid-template-columns:1fr 1fr;}
   }
 </style>
 </head>
@@ -179,7 +204,7 @@
 
 <header>
   <div class="header-inner">
-    <div class="logo">세무사<span> 매칭 검색</span></div>
+    <div class="logo">SAVETAX<span> 세무사 배정</span></div>
     <button class="admin-toggle" onclick="toggleAdmin()">⚙️ 관리자</button>
   </div>
 </header>
@@ -192,6 +217,15 @@
 </div>
 
 <main>
+
+  <!-- 탭 바 -->
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('search', this)">🔍 세무사 검색</button>
+    <button class="tab-btn" onclick="switchTab('dashboard', this)">📊 배정 현황</button>
+  </div>
+
+  <!-- 탭: 세무사 검색 -->
+  <div class="tab-content active" id="tab-search">
 
   <!-- 관리자 패널 -->
   <div class="admin-panel" id="adminPanel">
@@ -296,6 +330,24 @@
   </div>
 
   <div id="results"></div>
+  </div><!-- /tab-search -->
+
+  <!-- 탭: 배정 현황 -->
+  <div class="tab-content" id="tab-dashboard">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--text)">실시간 배정 현황</div>
+        <div id="dashUpdated" style="font-size:12px;color:var(--text-sub);margin-top:2px"></div>
+      </div>
+      <button class="admin-toggle" onclick="renderDashboard()" style="font-size:12px">🔄 새로고침</button>
+    </div>
+    <div class="dashboard-grid" id="dashGrid">
+      <div style="font-size:14px;color:var(--text-sub);padding:2rem;text-align:center;grid-column:1/-1">
+        데이터 로딩 중...
+      </div>
+    </div>
+  </div><!-- /tab-dashboard -->
+
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -579,6 +631,8 @@ async function loadAirtable() {
     CONTRACT_MAP = map;
     localStorage.setItem(LS_CONTRACT, JSON.stringify({ map, updatedAt: new Date().toISOString() }));
     updateStatusBar();
+    // 배정현황 탭이 열려있으면 즉시 갱신
+    if (document.getElementById("tab-dashboard")?.classList.contains("active")) renderDashboard();
 
   } catch(e) {
     // 실패 시 캐시 사용
@@ -925,6 +979,99 @@ function renderResults(list, q) {
 document.getElementById("searchInput").addEventListener("keydown", e=>{ if(e.key==="Enter") doSearch(); });
 loadData();
 initTokenUI();
+
+// ── 탭 전환 ──────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
+  document.querySelectorAll(".tab-btn").forEach(el => el.classList.remove("active"));
+  document.getElementById("tab-" + name).classList.add("active");
+  btn.classList.add("active");
+  if (name === "dashboard") renderDashboard();
+}
+
+// ── 배정 현황 렌더링 ──────────────────────────────────────
+function renderDashboard() {
+  const grid = document.getElementById("dashGrid");
+  const updEl = document.getElementById("dashUpdated");
+
+  if (!TAX_DATA.length) {
+    grid.innerHTML = `<div style="font-size:14px;color:var(--text-sub);padding:2rem;text-align:center;grid-column:1/-1">세무사 데이터가 없습니다. 새로고침해주세요.</div>`;
+    return;
+  }
+
+  // Airtable 마지막 업데이트 시각
+  const contractCache = JSON.parse(localStorage.getItem("semusa_contract_v1") || "null");
+  if (contractCache?.updatedAt) {
+    const dt = new Date(contractCache.updatedAt);
+    updEl.textContent = `계약 현황 기준: ${dt.getFullYear()}.${pad(dt.getMonth()+1)}.${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+  } else {
+    updEl.textContent = "계약 현황 미연동 — 관리자 패널에서 토큰을 설정해주세요.";
+  }
+
+  // 세무사별 카드 생성
+  // individual/corporate 가 null 인 세무사는 목록에서 제외
+  const list = TAX_DATA.filter(t => t.individual !== null || t.corporate !== null);
+
+  if (!list.length) {
+    grid.innerHTML = `<div style="font-size:14px;color:var(--text-sub);padding:2rem;text-align:center;grid-column:1/-1">수임 정보가 있는 세무사가 없습니다.</div>`;
+    return;
+  }
+
+  // 수임 가능 → 수임 불가 순 정렬, 같은 상태면 이름순
+  const sorted = [...list].sort((a, b) => {
+    const aFull = isFullyBooked(a);
+    const bFull = isFullyBooked(b);
+    if (aFull !== bFull) return aFull ? 1 : -1;
+    return a.name.localeCompare(b.name, "ko");
+  });
+
+  grid.innerHTML = sorted.map(t => {
+    const { remInd, remCorp, usedInd, usedCorp } = getRemaining(t);
+    const maxInd  = t.individual;
+    const maxCorp = t.corporate;
+
+    // 수임 가능 여부 판단
+    const indFull  = maxInd  !== null && usedInd  >= maxInd;
+    const corpFull = maxCorp !== null && usedCorp >= maxCorp;
+    const allFull  = (maxInd === null || indFull) && (maxCorp === null || corpFull);
+    const anyFull  = indFull || corpFull;
+    const cardCls  = allFull ? "dash-card full" : "dash-card ok";
+
+    let rows = "";
+    if (maxInd !== null) {
+      const cls = indFull ? "full" : "ok";
+      rows += `<div class="dash-row">
+        <span class="dash-label">개인사업자</span>
+        <span class="dash-count ${cls}">${maxInd} / ${usedInd}</span>
+      </div>`;
+    }
+    if (maxCorp !== null) {
+      const cls = corpFull ? "full" : "ok";
+      rows += `<div class="dash-row">
+        <span class="dash-label">법인사업자</span>
+        <span class="dash-count ${cls}">${maxCorp} / ${usedCorp}</span>
+      </div>`;
+    }
+
+    const badgeCls  = allFull ? "full" : anyFull ? "partial" : "ok";
+    const badgeLbl  = allFull ? "수임 불가" : anyFull ? "일부 수임 불가" : "수임 가능";
+
+    return `<div class="${cardCls}">
+      <div class="dash-name">${t.name} 세무사</div>
+      <div style="font-size:11px;color:var(--text-sub);margin-bottom:8px">${t.firm}</div>
+      <div style="font-size:11px;color:var(--text-sub);margin-bottom:6px;font-weight:500">최대 / 현재 계약</div>
+      ${rows}
+      <span class="dash-badge ${badgeCls}">${badgeLbl}</span>
+    </div>`;
+  }).join("");
+}
+
+function isFullyBooked(t) {
+  const { usedInd, usedCorp } = getRemaining(t);
+  const indFull  = t.individual !== null && usedInd  >= t.individual;
+  const corpFull = t.corporate  !== null && usedCorp >= t.corporate;
+  return (t.individual === null || indFull) && (t.corporate === null || corpFull);
+}
 </script>
 </body>
 </html>
