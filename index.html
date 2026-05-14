@@ -554,13 +554,9 @@ async function loadAirtable() {
     let allRecords = [];
     let offset = null;
     do {
-      const url = new URL(`https://api.airtable.com/v0/${AT_BASE}/${AT_TABLE}`);
-      url.searchParams.set("view", AT_VIEW);
-      url.searchParams.set("pageSize", "100");
-      url.searchParams.set("fields[]", "지점명");
-      url.searchParams.set("fields[]", "사업자유형");
-      if (offset) url.searchParams.set("offset", offset);
-      const res = await fetch(url.toString(), {
+      let url = `https://api.airtable.com/v0/${AT_BASE}/${AT_TABLE}?view=${AT_VIEW}&pageSize=100&fields%5B%5D=%EC%A7%80%EC%A0%90%EB%AA%85&fields%5B%5D=%EC%82%AC%EC%97%85%EC%9E%90%EC%9C%A0%ED%98%95`;
+      if (offset) url += `&offset=${encodeURIComponent(offset)}`;
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
