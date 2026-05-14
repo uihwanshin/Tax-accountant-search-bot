@@ -794,6 +794,19 @@ function haversine(lat1,lon1,lat2,lon2) {
 }
 
 // ── 검색 ────────────────────────────────────────────────
+// ── 이름 + 직함 포맷 ─────────────────────────────────────
+const ACCOUNTANTS   = ["이범기", "정준"];       // 회계사
+const NO_TITLE      = ["선영회계법인"];          // 직함 없음
+const DISPLAY_NAMES = { "선영회계법인": "선영회계법인 본점" }; // 표시 이름 변경
+
+function formatName(t) {
+  const displayName = DISPLAY_NAMES[t.name] || t.name;
+  if (NO_TITLE.includes(t.name))       return displayName;           // 직함 없음
+  if (ACCOUNTANTS.includes(t.name))    return `${displayName} 회계사`;
+  return `${displayName} 세무사`;
+}
+
+
 function doSearch() {
   // 업종 필수 체크
   const industryRaw = document.getElementById("searchInput").value.trim();
@@ -904,17 +917,6 @@ function getRemaining(t) {
   return { remInd, remCorp, usedInd, usedCorp };
 }
 
-// ── 이름 + 직함 포맷 ─────────────────────────────────────
-const ACCOUNTANTS   = ["이범기", "정준"];       // 회계사
-const NO_TITLE      = ["선영회계법인"];          // 직함 없음
-const DISPLAY_NAMES = { "선영회계법인": "선영회계법인 본점" }; // 표시 이름 변경
-
-function formatName(t) {
-  const displayName = DISPLAY_NAMES[t.name] || t.name;
-  if (NO_TITLE.includes(t.name))       return displayName;           // 직함 없음
-  if (ACCOUNTANTS.includes(t.name))    return `${displayName} 회계사`;
-  return `${displayName} 세무사`;
-}
 
 function capInfo(t, biz) {
   const { remInd, remCorp } = getRemaining(t);
