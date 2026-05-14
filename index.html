@@ -220,6 +220,7 @@
     .card{padding:14px;}
     .card-name{font-size:15px;}
     .dashboard-grid{grid-template-columns:1fr 1fr;}
+    #dashSummary{grid-template-columns:1fr;}
   }
 </style>
 </head>
@@ -364,6 +365,9 @@
       </div>
       <button class="admin-toggle" onclick="loadAirtable().then(renderDashboard)" style="font-size:12px">🔄 새로고침</button>
     </div>
+
+    <!-- 총계 요약 -->
+    <div id="dashSummary" style="margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;"></div>
 
     <!-- 필터 바 -->
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
@@ -1114,7 +1118,58 @@ function renderDashboard() {
 
   const srOnly = document.getElementById("dashSrOnly")?.checked || false;
 
-  // 수임 정보 있는 세무사만
+  // ── 총계 계산 ────────────────────────────────────────────
+  let totalMaxInd = 0, totalMaxCorp = 0, totalMaxSR = 0;
+  let totalUsedInd = 0, totalUsedCorp = 0, totalUsedSR = 0;
+
+  TAX_DATA.forEach(t => {
+    const { usedInd, usedCorp } = getRemaining(t);
+    if (t.individual !== null) totalMaxInd  += t.individual;
+    if (t.corporate  !== null) totalMaxCorp += t.corporate;
+    if (t.sr) {
+      if (t.individual !== null) totalMaxSR  += t.individual;
+      if (t.corporate  !== null) totalMaxSR  += t.corporate;
+      totalUsedSR += usedInd + usedCorp;
+    }
+    totalUsedInd  += usedInd;
+    totalUsedCorp += usedCorp;
+  });
+
+  const totalRemInd  = Math.max(0, totalMaxInd  - totalUsedInd);
+  const totalRemCorp = Math.max(0, totalMaxCorp - totalUsedCorp);
+  const totalRemSR   = Math.max(0, totalMaxSR   - totalUsedSR);
+
+  function summaryCard(label, max, used, rem, color) {
+    const remColor = rem <= 0 ? "var(--danger)" : (max > 0 && rem <= max * 0.2) ? "var(--warn)" : "var(--primary)";
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;">
+      <div style="font-size:13px;font-weight:700;color:${color};margin-bottom:10px">${label}</div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;">
+          <span style="color:var(--text-sub)">수임 가능 수</span>
+          <strong style="color:var(--text)">${max}개</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;">
+          <span style="color:var(--text-sub)">계약 업체 수</span>
+          <strong style="color:var(--text)">${used}개</strong>
+        </div>
+        <div style="height:1px;background:var(--border);margin:2px 0;"></div>
+        <div style="display:flex;justify-content:space-between;font-size:14px;">
+          <span style="color:var(--text-sub);font-weight:500">배정 가능 수</span>
+          <strong style="color:${remColor};font-size:15px">${rem}개</strong>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  const summaryEl = document.getElementById("dashSummary");
+  if (summaryEl) {
+    summaryEl.innerHTML =
+      summaryCard("법인", totalMaxCorp, totalUsedCorp, totalRemCorp, "#185FA5") +
+      summaryCard("개인", totalMaxInd,  totalUsedInd,  totalRemInd,  "#0F6E56") +
+      summaryCard("SR",   totalMaxSR,   totalUsedSR,   totalRemSR,   "#854F0B");
+  }
+
+  // ── 세무사별 카드 ─────────────────────────────────────────
   let list = TAX_DATA.filter(t => t.individual !== null || t.corporate !== null);
 
   // SR 필터
