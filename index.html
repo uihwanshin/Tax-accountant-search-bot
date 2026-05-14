@@ -714,8 +714,12 @@ function finishUpload(rows, filename, us) {
 
 // ── 파싱 ────────────────────────────────────────────────
 function parseRow(r) {
-  const srRaw = r["SR수임"]||"";
-  const sr = srRaw===true||srRaw===1||String(srRaw).toLowerCase()==="checked"||srRaw==="예"||srRaw==="✓"||srRaw==="TRUE";
+  const srIndRaw  = r["SR개인수임"];
+  const srCorpRaw = r["SR법인수임"];
+  const srIndNum  = srIndRaw  !== "" && srIndRaw  !== undefined ? Number(srIndRaw)  : null;
+  const srCorpNum = srCorpRaw !== "" && srCorpRaw !== undefined ? Number(srCorpRaw) : null;
+  // SR개인수임 또는 SR법인수임 값이 있으면 SR 세무사로 판단
+  const sr = (srIndNum !== null && !isNaN(srIndNum)) || (srCorpNum !== null && !isNaN(srCorpNum));
   const avRaw = String(r["배정가능여부"]||"");
   const available = avRaw.includes("가능")&&!avRaw.includes("불")?"가능":avRaw.includes("불")?"불가능":"unknown";
   return {
@@ -727,8 +731,8 @@ function parseRow(r) {
     available,sr,
     individual:r["개인 수임"]!==""&&r["개인 수임"]!==undefined?Number(r["개인 수임"]):null,
     corporate:r["법인 수임"]!==""&&r["법인 수임"]!==undefined?Number(r["법인 수임"]):null,
-    srIndividual:r["SR개인수임"]!==""&&r["SR개인수임"]!==undefined?Number(r["SR개인수임"]):null,
-    srCorporate:r["SR법인수임"]!==""&&r["SR법인수임"]!==undefined?Number(r["SR법인수임"]):null,
+    srIndividual: srIndNum,
+    srCorporate:  srCorpNum,
     industries_ok:String(r["가능 업종"]||"").trim(),
     industries_no:String(r["불가능 업종"]||"").trim(),
     specialty:String(r["◆전문 업종"]||"").trim(),
