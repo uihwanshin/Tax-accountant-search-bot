@@ -306,6 +306,8 @@ const LS_KEY       = "semusa_data_v1";
 const LS_META      = "semusa_meta_v1";
 const LS_CONTRACT  = "semusa_contract_v1"; // Airtable 계약 현황 캐시
 const AT_BASE      = "appIlmHzRUNbuPCxA";
+const AT_TABLE     = "tbl19dkWYDkpQeGFH";
+const AT_VIEW      = "viwr5WVSy0V0n0czP";
 const LS_TOKEN     = "semusa_at_token";
 function getToken() { return localStorage.getItem(LS_TOKEN) || ""; }
 let TAX_DATA       = [];
@@ -543,31 +545,25 @@ async function loadSheets() {
 // ── Airtable 계약 현황 로드 ──────────────────────────────
 async function loadAirtable() {
   if (!getToken()) {
-    // 토큰 없으면 캐시 사용
     const cached = localStorage.getItem(LS_CONTRACT);
     if (cached) CONTRACT_MAP = JSON.parse(cached).map || {};
     return;
   }
   try {
-    // 전체 레코드 페이지네이션으로 가져오기
+    // 테이블/뷰 ID 고정 — 메타 API 호출 없이 바로 데이터 요청
     let allRecords = [];
     let offset = null;
-    // 테이블 ID 먼저 확인
-    const metaRes = await fetch(`https://api.airtable.com/v0/meta/bases/${AT_BASE}/tables`, {
-      headers: { Authorization: `Bearer ${getToken()}` }
-    });
-    const metaData = await metaRes.json();
-    const tables = metaData.tables || [];
-    const target = tables.find(t => t.name.includes("배정")) || tables[0];
-    if (!target) throw new Error("테이블 없음");
-
     do {
-      const url = new URL(`https://api.airtable.com/v0/${AT_BASE}/${target.id}`);
+      const url = new URL(`https://api.airtable.com/v0/${AT_BASE}/${AT_TABLE}`);
+      url.searchParams.set("view", AT_VIEW);
       url.searchParams.set("pageSize", "100");
+      url.searchParams.set("fields[]", "지점명");
+      url.searchParams.set("fields[]", "사업자유형");
       if (offset) url.searchParams.set("offset", offset);
       const res = await fetch(url.toString(), {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
+      if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
       allRecords = allRecords.concat(data.records || []);
       offset = data.offset || null;
@@ -576,11 +572,11 @@ async function loadAirtable() {
     // 지점명별 개인/법인 계약 수 집계
     const map = {};
     allRecords.forEach(rec => {
-      const branch = String(rec.fields["지점명"] || "").trim();
+      const branch  = String(rec.fields["지점명"]    || "").trim();
       const bizType = String(rec.fields["사업자유형"] || "").trim();
       if (!branch) return;
       if (!map[branch]) map[branch] = { individual: 0, corporate: 0 };
-      if (bizType === "개인사업자") map[branch].individual++;
+      if      (bizType === "개인사업자") map[branch].individual++;
       else if (bizType === "법인사업자") map[branch].corporate++;
     });
 
@@ -589,12 +585,9 @@ async function loadAirtable() {
     updateStatusBar();
 
   } catch(e) {
-    // Airtable 실패 시 캐시 사용
+    // 실패 시 캐시 사용
     const cached = localStorage.getItem(LS_CONTRACT);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      CONTRACT_MAP = parsed.map || {};
-    }
+    if (cached) CONTRACT_MAP = JSON.parse(cached).map || {};
     updateStatusBar();
   }
 }
