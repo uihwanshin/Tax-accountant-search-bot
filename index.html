@@ -727,6 +727,8 @@ function parseRow(r) {
     available,sr,
     individual:r["개인 수임"]!==""&&r["개인 수임"]!==undefined?Number(r["개인 수임"]):null,
     corporate:r["법인 수임"]!==""&&r["법인 수임"]!==undefined?Number(r["법인 수임"]):null,
+    srIndividual:r["SR개인수임"]!==""&&r["SR개인수임"]!==undefined?Number(r["SR개인수임"]):null,
+    srCorporate:r["SR법인수임"]!==""&&r["SR법인수임"]!==undefined?Number(r["SR법인수임"]):null,
     industries_ok:String(r["가능 업종"]||"").trim(),
     industries_no:String(r["불가능 업종"]||"").trim(),
     specialty:String(r["◆전문 업종"]||"").trim(),
@@ -921,8 +923,11 @@ function getRemaining(t) {
   }
   const usedInd  = contract ? contract.individual : 0;
   const usedCorp = contract ? contract.corporate  : 0;
-  const remInd   = t.individual !== null ? Math.max(0, t.individual - usedInd)  : null;
-  const remCorp  = t.corporate  !== null ? Math.max(0, t.corporate  - usedCorp) : null;
+  // SR 세무사는 SR전용 수임 가능 수 우선 사용
+  const maxInd  = (t.sr && t.srIndividual !== null) ? t.srIndividual : t.individual;
+  const maxCorp = (t.sr && t.srCorporate  !== null) ? t.srCorporate  : t.corporate;
+  const remInd   = maxInd  !== null ? Math.max(0, maxInd  - usedInd)  : null;
+  const remCorp  = maxCorp !== null ? Math.max(0, maxCorp - usedCorp) : null;
   return { remInd, remCorp, usedInd, usedCorp };
 }
 
@@ -1127,8 +1132,11 @@ function renderDashboard() {
     if (t.individual !== null) totalMaxInd  += t.individual;
     if (t.corporate  !== null) totalMaxCorp += t.corporate;
     if (t.sr) {
-      if (t.individual !== null) totalMaxSRInd  += t.individual;
-      if (t.corporate  !== null) totalMaxSRCorp += t.corporate;
+      // SR 개인/법인 수임 가능 수: SR전용 컬럼 우선, 없으면 일반 컬럼 사용
+      const srInd  = t.srIndividual !== null ? t.srIndividual : (t.individual !== null ? t.individual : 0);
+      const srCorp = t.srCorporate  !== null ? t.srCorporate  : (t.corporate  !== null ? t.corporate  : 0);
+      totalMaxSRInd  += srInd;
+      totalMaxSRCorp += srCorp;
       totalUsedSRInd  += usedInd;
       totalUsedSRCorp += usedCorp;
     }
