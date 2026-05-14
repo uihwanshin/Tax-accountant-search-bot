@@ -256,21 +256,6 @@
     <h3>📂 데이터 업데이트</h3>
     <p>새 엑셀 파일을 업로드하면 모든 사용자에게 즉시 반영됩니다.<br>
     Google Sheets에서 <strong>파일 → 공유 → 웹에 게시 → CSV</strong>로 내보내거나 .xlsx 파일을 직접 업로드하세요.</p>
-    <!-- Airtable 토큰 입력 -->
-    <div style="margin-bottom:14px;padding:12px 14px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border);">
-      <div style="font-size:12px;font-weight:700;color:var(--text-sub);margin-bottom:8px">🔑 Airtable 토큰 (계약 현황 실시간 연동)</div>
-      <div style="display:flex;gap:8px;">
-        <input class="text-input" id="tokenInput" type="password"
-          placeholder="pat... 으로 시작하는 토큰 입력"
-          style="flex:1;font-size:13px;padding:8px 12px;"
-          value=""
-        />
-        <button onclick="saveToken()" style="padding:8px 14px;font-size:13px;font-weight:700;background:var(--primary);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;white-space:nowrap;">저장</button>
-        <button onclick="clearToken()" style="padding:8px 14px;font-size:13px;background:var(--bg);color:var(--danger);border:1px solid var(--danger);border-radius:var(--radius-sm);cursor:pointer;white-space:nowrap;">삭제</button>
-      </div>
-      <div id="tokenStatus" style="font-size:12px;margin-top:6px;color:var(--text-sub)"></div>
-    </div>
-
     <div class="dropzone" id="dropzone"
       onclick="document.getElementById('fileInput').click()"
       ondragover="event.preventDefault();this.classList.add('drag')"
@@ -403,11 +388,7 @@ const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQxPoON_qWplhsQ
 const LS_KEY       = "semusa_data_v1";
 const LS_META      = "semusa_meta_v1";
 const LS_CONTRACT  = "semusa_contract_v1"; // Airtable 계약 현황 캐시
-const AT_BASE      = "appIlmHzRUNbuPCxA";
-const AT_TABLE     = "tbl19dkWYDkpQeGFH";
-const AT_VIEW      = "viwr5WVSy0V0n0czP";
-const LS_TOKEN     = "semusa_at_token";
-function getToken() { return localStorage.getItem(LS_TOKEN) || ""; }
+const WORKER_URL   = "https://savetax-airtable-proxy.suh-204.workers.dev/airtable";
 let TAX_DATA       = [];
 let CONTRACT_MAP   = {}; // { "지점명": { individual: N, corporate: N } }
 let adminOpen      = false;
@@ -592,32 +573,8 @@ function toggleAdmin() {
 }
 
 // ── 데이터 로드 ──────────────────────────────────────────
-// ── 토큰 관리 ────────────────────────────────────────────
-function saveToken() {
-  const val = document.getElementById("tokenInput").value.trim();
-  if (!val) { showTokenStatus("❌ 토큰을 입력해주세요.", "var(--danger)"); return; }
-  if (!val.startsWith("pat")) { showTokenStatus("❌ 올바른 토큰 형식이 아닙니다. (pat...으로 시작)", "var(--danger)"); return; }
-  localStorage.setItem(LS_TOKEN, val);
-  document.getElementById("tokenInput").value = "";
-  showTokenStatus("✅ 저장됐습니다. 계약 현황을 불러옵니다...", "var(--primary)");
-  loadAirtable().then(updateStatusBar);
-}
-function clearToken() {
-  localStorage.removeItem(LS_TOKEN);
-  localStorage.removeItem(LS_CONTRACT);
-  CONTRACT_MAP = {};
-  document.getElementById("tokenInput").value = "";
-  showTokenStatus("🗑️ 토큰이 삭제됐습니다.", "var(--text-sub)");
-  updateStatusBar();
-}
-function showTokenStatus(msg, color) {
-  const el = document.getElementById("tokenStatus");
-  if (el) { el.textContent = msg; el.style.color = color; }
-}
-function initTokenUI() {
-  const el = document.getElementById("tokenInput");
-  if (el && getToken()) el.placeholder = "✅ 토큰 저장됨 (변경하려면 새 토큰 입력)";
-}
+// 토큰 관리 불필요 — Cloudflare Worker에서 처리
+function initTokenUI() {}
 
 async function loadData() {
   setStatus('<span class="spinner"></span>데이터 불러오는 중...');
@@ -653,42 +610,15 @@ async function loadSheets() {
 
 // ── Airtable 계약 현황 로드 ──────────────────────────────
 async function loadAirtable() {
-  if (!getToken()) {
-    const cached = localStorage.getItem(LS_CONTRACT);
-    if (cached) CONTRACT_MAP = JSON.parse(cached).map || {};
-    return;
-  }
   try {
-    // 테이블/뷰 ID 고정 — 메타 API 호출 없이 바로 데이터 요청
-    let allRecords = [];
-    let offset = null;
-    do {
-      let url = `https://api.airtable.com/v0/${AT_BASE}/${AT_TABLE}?view=${AT_VIEW}&pageSize=100&fields%5B%5D=%EC%A7%80%EC%A0%90%EB%AA%85(slack)&fields%5B%5D=%EC%82%AC%EC%97%85%EC%9E%90%EC%9C%A0%ED%98%95`;
-      if (offset) url += `&offset=${encodeURIComponent(offset)}`;
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const data = await res.json();
-      allRecords = allRecords.concat(data.records || []);
-      offset = data.offset || null;
-    } while (offset);
+    const res = await fetch(WORKER_URL);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
 
-    // 지점명별 개인/법인 계약 수 집계
-    const map = {};
-    allRecords.forEach(rec => {
-      const branch  = String(rec.fields["지점명(slack)"] || rec.fields["지점명"] || "").trim();
-      const bizType = String(rec.fields["사업자유형"] || "").trim();
-      if (!branch) return;
-      if (!map[branch]) map[branch] = { individual: 0, corporate: 0 };
-      if      (bizType === "개인사업자") map[branch].individual++;
-      else if (bizType === "법인사업자") map[branch].corporate++;
-    });
-
-    CONTRACT_MAP = map;
-    localStorage.setItem(LS_CONTRACT, JSON.stringify({ map, updatedAt: new Date().toISOString() }));
+    CONTRACT_MAP = data.map || {};
+    localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, updatedAt: data.updatedAt || new Date().toISOString() }));
     updateStatusBar();
-    // 배정현황 탭이 열려있으면 즉시 갱신
     if (document.getElementById("tab-dashboard")?.classList.contains("active")) renderDashboard();
 
   } catch(e) {
@@ -709,8 +639,8 @@ function updateStatusBar() {
   const count = TAX_DATA.length || (meta ? meta.count : 0);
   const src = meta ? (meta.source === "Google Sheets" ? "☁️ Google Sheets" : `📦 ${meta.source}`) : "📦 캐시";
   const atStatus = Object.keys(CONTRACT_MAP).length > 0
-    ? `🔄 계약현황 실시간`
-    : contractCache ? `📦 계약현황 캐시` : `⚠️ 계약현황 없음`;
+    ? `🔄 계약현황 실시간 연동`
+    : contractCache ? `📦 계약현황 캐시` : `⚠️ 계약현황 로드 실패`;
   const dt = meta ? new Date(meta.updatedAt) : new Date();
   const d = `${dt.getFullYear()}.${pad(dt.getMonth()+1)}.${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
   setStatus(`✅ <strong>${count}명</strong> &nbsp;·&nbsp; 세무사정보: <strong>${d}</strong> (${src}) &nbsp;·&nbsp; ${atStatus}`);
@@ -1060,7 +990,6 @@ function renderResults(list, q) {
 
 document.getElementById("searchInput").addEventListener("keydown", e=>{ if(e.key==="Enter") doSearch(); });
 loadData();
-initTokenUI();
 
 // ── 탭 전환 ──────────────────────────────────────────────
 function switchTab(name, btn) {
