@@ -995,7 +995,7 @@ function renderResults(list, q) {
 
     html += `<div class="card" style="${borderStyle}">`;
     html += `<div class="card-top"><div class="card-left">`;
-    html += `<div class="avatar ${avatarCls}">${(BRANCH_NAMES[t.name]||t.name).charAt(0)}</div>`;
+    html += `<div class="avatar ${avatarCls}">${(DISPLAY_NAMES[t.name]||t.name).charAt(0)}</div>`;
     html += `<div><div class="card-name">${formatName(t)}</div>`;
     html += `<div class="card-firm">${t.firm}</div>`;
     html += `<div class="card-badges">`;
