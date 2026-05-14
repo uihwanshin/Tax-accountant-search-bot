@@ -572,8 +572,19 @@ document.addEventListener("click", e => {
 
 // ── 관리자 ───────────────────────────────────────────────
 function toggleAdmin() {
-  adminOpen = !adminOpen;
-  document.getElementById("adminPanel").classList.toggle("open", adminOpen);
+  if (adminOpen) {
+    adminOpen = false;
+    document.getElementById("adminPanel").classList.remove("open");
+    return;
+  }
+  const pw = prompt("관리자 비밀번호를 입력하세요.");
+  if (pw === null) return; // 취소
+  if (pw !== "unitblack") {
+    alert("비밀번호가 올바르지 않습니다.");
+    return;
+  }
+  adminOpen = true;
+  document.getElementById("adminPanel").classList.add("open");
 }
 
 // ── 데이터 로드 ──────────────────────────────────────────
@@ -844,19 +855,17 @@ function doSearch() {
 
   const candidates = TAX_DATA.map(t => {
     if (srOnly && !t.sr) return null;
-    if (biz === "개인" && (t.individual === null || t.individual < 0)) return null;
-    if (biz === "법인" && (t.corporate === null || t.corporate < 0)) return null;
 
     const ok      = (t.industries_ok + " " + t.specialty).toLowerCase().trim();
     const no      = (t.industries_no || "").toLowerCase().trim();
     const hasData = ok.length > 0 || no.length > 0;
 
-    // 불가능 업종에 해당하면 완전 제외
+    // 불가능 업종이면 완전 제외
     for (const ind of industries) {
       if (no.includes(ind.toLowerCase())) return null;
     }
 
-    // 가능 업종 매칭 수
+    // 업종 매칭 여부
     let matchCount = 0;
     if (hasData) {
       for (const ind of industries) {
@@ -865,6 +874,15 @@ function doSearch() {
     }
     const industryMatched = hasData && matchCount > 0;
 
+    // 잔여 수임 수 계산
+    const { remInd, remCorp } = getRemaining(t);
+    // 선택한 사업자 유형 기준 잔여 수임 수
+    let remaining = null;
+    if (biz === "개인")      remaining = remInd;
+    else if (biz === "법인") remaining = remCorp;
+    else                     remaining = Math.max(remInd ?? 0, remCorp ?? 0); // 전체면 어느 한쪽이라도 남으면 OK
+    const hasCapacity = remaining === null || remaining > 0; // null이면 데이터없어 알수없음→일단 허용
+
     // 거리 계산
     let tLat = t.lat, tLng = t.lng;
     if (!tLat || !tLng) { const e = coordFromAddress(t.address); if (e) { tLat=e[0]; tLng=e[1]; } }
@@ -872,22 +890,24 @@ function doSearch() {
 
     const avail = t.available === "가능";
 
-    // 3단계 섹션 분류
-    // A: 수임 가능 + 업종 매칭        → 뱃지: 수임 가능
-    // B: 수임 가능 + 업종 매칭 안됨   → 뱃지: 확인 필요
-    // C: 수임 불가 (매칭/비매칭 모두) → 뱃지: 수임 불가
+    // ── 섹션 분류 ──────────────────────────────────────────
+    // A (수임 가능)  : 배정가능=가능 + 업종매칭 + 잔여>0
+    // B (확인 필요)  : 배정가능=가능 + (업종매칭or불명확) + 잔여=0 or 잔여없음
+    //                  (수임가능이지만 자리가 없거나 업종 불명확)
+    // C (수임 불가)  : 배정가능=불가능 (업종매칭 여부 무관)
+    //                  C 내부: 업종매칭된 것 먼저, 아닌 것 나중
     let section;
-    if      (avail && industryMatched)  section = "A";
-    else if (avail && !industryMatched) section = "B";
-    else                                section = "C";
+    if      (avail && industryMatched && hasCapacity)  section = "A";
+    else if (avail && !hasCapacity)                    section = "B"; // 자리없음 (업종 매칭여부 무관)
+    else if (avail && !industryMatched && hasCapacity) section = "B"; // 업종 불명확
+    else                                               section = "C"; // 배정불가
 
-    // C 내부 서브 정렬: 업종 매칭된 것 먼저(0), 아닌 것 나중(1)
-    const subOrder = (section === "C" && !industryMatched) ? 1 : 0;
+    const subOrder = (section === "C" && industryMatched) ? 0 : 1;
 
-    return { ...t, matchCount, distKm, industryMatched, section, subOrder };
+    return { ...t, matchCount, distKm, industryMatched, hasCapacity, remaining, section, subOrder };
   }).filter(Boolean);
 
-  // 정렬: 섹션(A→B→C) → C 내부 subOrder(매칭 먼저) → 거리
+  // 정렬: 섹션(A→B→C) → C 내부 업종매칭 먼저 → 거리
   const sectionRank = { "A":0, "B":1, "C":2 };
   candidates.sort((a, b) => {
     const sa = sectionRank[a.section], sb = sectionRank[b.section];
@@ -922,11 +942,17 @@ function getRemaining(t) {
 
 function capInfo(t, biz) {
   const { remInd, remCorp } = getRemaining(t);
-  if (biz==="개인") return remInd!==null ? `개인 잔여 ${remInd}건` : null;
-  if (biz==="법인") return remCorp!==null ? `법인 잔여 ${remCorp}건` : null;
+  if (biz==="개인") {
+    if (remInd === null) return null;
+    return remInd === 0 ? `개인 잔여 0건 (수임불가)` : `개인 잔여 ${remInd}건`;
+  }
+  if (biz==="법인") {
+    if (remCorp === null) return null;
+    return remCorp === 0 ? `법인 잔여 0건 (수임불가)` : `법인 잔여 ${remCorp}건`;
+  }
   const p=[];
-  if (remInd!==null)  p.push(`개인 ${remInd}건`);
-  if (remCorp!==null) p.push(`법인 ${remCorp}건`);
+  if (remInd!==null)  p.push(`개인 ${remInd}건${remInd===0?" ⚠":"" }`);
+  if (remCorp!==null) p.push(`법인 ${remCorp}건${remCorp===0?" ⚠":""}`);
   return p.length ? "잔여: "+p.join(" / ") : null;
 }
 
@@ -945,7 +971,7 @@ function renderResults(list, q) {
 
   const SECTION_LABELS = {
     "A": null,
-    "B": { text:"확인 필요", bg:"#FAEEDA", col:"#854F0B" },
+    "B": { text:"확인 필요 (수임 가능 · 잔여 없음 또는 업종 불명확)", bg:"#FAEEDA", col:"#854F0B" },
     "C": { text:"수임 불가", bg:"#FAECE7", col:"#993C1D" },
   };
 
@@ -971,6 +997,10 @@ function renderResults(list, q) {
     const sBg  = t.section==="A" ? "#E1F5EE" : t.section==="B" ? "#FAEEDA" : "#FAECE7";
     const sCol = t.section==="A" ? "#0F6E56" : t.section==="B" ? "#854F0B" : "#993C1D";
     const sLbl = t.section==="A" ? "수임 가능" : t.section==="B" ? "확인 필요" : "수임 불가";
+    // 잔여 수임 표시 (B: 잔여0 강조)
+    if (t.section==="B" && t.remaining !== null && t.remaining === 0) {
+      if (!cap) { /* cap이 없으면 잔여0 직접 표시 */ }
+    }
 
     // 카드 스타일
     const borderStyle = t.section==="A" ? "border:1.5px solid var(--primary-mid)" : "border:1px solid var(--border)";
@@ -1007,9 +1037,15 @@ function renderResults(list, q) {
       const prev = t.industries_ok.slice(0,120)+(t.industries_ok.length>120?"…":"");
       html += `<div class="match-box"><strong>✓ 업종 매칭 (${t.matchCount}/${q.industries.length})</strong> — ${prev}</div>`;
     }
-    // B섹션 확인 안내
+    // B섹션 안내 메시지 세분화
     if (t.section === "B") {
-      html += `<div class="match-box" style="background:var(--warn-light);color:var(--warn)">📋 해당 업종 수임 가능 여부를 관리팀에 확인해주세요.</div>`;
+      if (!t.hasCapacity && t.industryMatched) {
+        html += `<div class="match-box" style="background:var(--warn-light);color:var(--warn)">⚠️ 업종 수임은 가능하나 현재 잔여 수임 건수가 없습니다.</div>`;
+      } else if (!t.hasCapacity && !t.industryMatched) {
+        html += `<div class="match-box" style="background:var(--warn-light);color:var(--warn)">⚠️ 업종 수임 가능 여부 불명확 · 잔여 수임 건수 없음. 관리팀에 확인해주세요.</div>`;
+      } else {
+        html += `<div class="match-box" style="background:var(--warn-light);color:var(--warn)">📋 해당 업종 수임 가능 여부를 관리팀에 확인해주세요.</div>`;
+      }
     }
     if (t.notes) html += `<div class="note-box">⚠️ ${t.notes.trim()}</div>`;
     html += `</div>`;
