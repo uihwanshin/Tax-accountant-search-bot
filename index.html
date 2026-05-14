@@ -367,7 +367,7 @@
     </div>
 
     <!-- 총계 요약 -->
-    <div id="dashSummary" style="margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;"></div>
+    <div id="dashSummary" style="margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
 
     <!-- 필터 바 -->
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
@@ -1119,25 +1119,30 @@ function renderDashboard() {
   const srOnly = document.getElementById("dashSrOnly")?.checked || false;
 
   // ── 총계 계산 ────────────────────────────────────────────
-  let totalMaxInd = 0, totalMaxCorp = 0, totalMaxSR = 0;
-  let totalUsedInd = 0, totalUsedCorp = 0, totalUsedSR = 0;
+  let totalMaxInd = 0, totalMaxCorp = 0;
+  let totalUsedInd = 0, totalUsedCorp = 0;
+
+  let totalMaxSRInd = 0, totalMaxSRCorp = 0;
+  let totalUsedSRInd = 0, totalUsedSRCorp = 0;
 
   TAX_DATA.forEach(t => {
     const { usedInd, usedCorp } = getRemaining(t);
     if (t.individual !== null) totalMaxInd  += t.individual;
     if (t.corporate  !== null) totalMaxCorp += t.corporate;
     if (t.sr) {
-      if (t.individual !== null) totalMaxSR  += t.individual;
-      if (t.corporate  !== null) totalMaxSR  += t.corporate;
-      totalUsedSR += usedInd + usedCorp;
+      if (t.individual !== null) totalMaxSRInd  += t.individual;
+      if (t.corporate  !== null) totalMaxSRCorp += t.corporate;
+      totalUsedSRInd  += usedInd;
+      totalUsedSRCorp += usedCorp;
     }
     totalUsedInd  += usedInd;
     totalUsedCorp += usedCorp;
   });
 
-  const totalRemInd  = Math.max(0, totalMaxInd  - totalUsedInd);
-  const totalRemCorp = Math.max(0, totalMaxCorp - totalUsedCorp);
-  const totalRemSR   = Math.max(0, totalMaxSR   - totalUsedSR);
+  const totalRemInd    = Math.max(0, totalMaxInd    - totalUsedInd);
+  const totalRemCorp   = Math.max(0, totalMaxCorp   - totalUsedCorp);
+  const totalRemSRInd  = Math.max(0, totalMaxSRInd  - totalUsedSRInd);
+  const totalRemSRCorp = Math.max(0, totalMaxSRCorp - totalUsedSRCorp);
 
   function summaryCard(label, max, used, rem, color) {
     const remColor = rem <= 0 ? "var(--danger)" : (max > 0 && rem <= max * 0.2) ? "var(--warn)" : "var(--primary)";
@@ -1164,9 +1169,11 @@ function renderDashboard() {
   const summaryEl = document.getElementById("dashSummary");
   if (summaryEl) {
     summaryEl.innerHTML =
-      summaryCard("법인", totalMaxCorp, totalUsedCorp, totalRemCorp, "#185FA5") +
-      summaryCard("개인", totalMaxInd,  totalUsedInd,  totalRemInd,  "#0F6E56") +
-      summaryCard("SR",   totalMaxSR,   totalUsedSR,   totalRemSR,   "#854F0B");
+      summaryCard("법인 전체",   totalMaxCorp,   totalUsedCorp,   totalRemCorp,   "#185FA5") +
+      summaryCard("개인 전체",   totalMaxInd,    totalUsedInd,    totalRemInd,    "#0F6E56") +
+      `<div style="grid-column:1/-1;height:1px;background:var(--border);margin:4px 0;"></div>` +
+      summaryCard("SR · 법인",   totalMaxSRCorp, totalUsedSRCorp, totalRemSRCorp, "#6B4EBB") +
+      summaryCard("SR · 개인",   totalMaxSRInd,  totalUsedSRInd,  totalRemSRInd,  "#2E7D9E");
   }
 
   // ── 세무사별 카드 ─────────────────────────────────────────
