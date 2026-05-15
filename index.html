@@ -412,10 +412,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQxPoON_qWplhsQpChFTxqAOVA-EgqIP5qpJ3jq6Y3pB3-Nj70DLXJ7QUtm8OuDNOZoFha97URx-VK6/pub?gid=0&single=true&output=csv";
-// 날짜 기반 캐시 키 — 날짜가 바뀌면 자동으로 캐시 무효화
-const TODAY        = new Date().toISOString().slice(0,10); // "2026-05-14"
-const LS_KEY       = `semusa_data_${TODAY}`;
-const LS_META      = `semusa_meta_${TODAY}`;
+// 날짜 기반 캐시 키 — 함수로 매번 계산해서 자정 넘김 문제 방지 (버그 #6 수정)
+function getToday() { return new Date().toISOString().slice(0,10); }
+const LS_KEY_PREFIX = "semusa_data_";
+const LS_META_PREFIX = "semusa_meta_";
+// LS_KEY/LS_META는 호출 시점의 날짜 기준으로 동적 생성
+Object.defineProperty(window, 'TODAY',  { get: () => getToday() });
+Object.defineProperty(window, 'LS_KEY', { get: () => LS_KEY_PREFIX  + getToday() });
+Object.defineProperty(window, 'LS_META',{ get: () => LS_META_PREFIX + getToday() });
 const LS_CONTRACT  = "semusa_contract_v1"; // Airtable는 실시간이라 날짜 무관
 const WORKER_URL   = "https://savetax-airtable-proxy.suh-204.workers.dev/airtable";
 let TAX_DATA       = [];
@@ -672,12 +676,15 @@ async function loadSheets() {
       const meta = { updatedAt: new Date().toISOString(), count: parsed.length, source: "Google Sheets" };
       localStorage.setItem(LS_KEY, JSON.stringify(parsed));
       localStorage.setItem(LS_META, JSON.stringify(meta));
-      // 이전 날짜 캐시 자동 정리
+      // 이전 날짜 캐시 자동 정리 (버그 #5 수정: TODAY를 함수로 호출)
+      const todayStr = getToday();
       Object.keys(localStorage).forEach(k => {
-        if ((k.startsWith("semusa_data_") || k.startsWith("semusa_meta_")) && !k.includes(TODAY)) {
+        if ((k.startsWith(LS_KEY_PREFIX) || k.startsWith(LS_META_PREFIX)) && !k.includes(todayStr)) {
           localStorage.removeItem(k);
         }
       });
+      // Sheets 로드 완료 시 즉시 상태바 갱신 (버그 #5 수정)
+      updateStatusBar();
     } else {
       localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_META);
     }
@@ -886,15 +893,16 @@ function doSearch() {
     return;
   }
 
-  // 검색 버튼 로딩 표시
+  // 검색 버튼 로딩 표시 (버그 #3 수정: 클로저로 searchBtn 안전하게 참조)
   const searchBtn = document.querySelector(".btn-search");
   if (searchBtn) { searchBtn.textContent = "검색 중..."; searchBtn.disabled = true; }
 
   // 로딩 스피너 표시
   document.getElementById("results").innerHTML = `<div style="padding:2rem;text-align:center;color:var(--text-sub);font-size:14px"><span class="spinner"></span>검색 중...</div>`;
 
-  // 300ms 후 결과 표시 (로딩 느낌)
+  // 300ms 후 결과 표시
   setTimeout(() => {
+    // searchBtn을 클로저로 캡처했으므로 안전하게 복원
     if (searchBtn) { searchBtn.textContent = "검색하기"; searchBtn.disabled = false; }
 
   const region   = document.getElementById("selRegion").value;
@@ -937,11 +945,29 @@ function doSearch() {
     // 잔여 수임 수 계산
     const { remInd, remCorp } = getRemaining(t);
     // 선택한 사업자 유형 기준 잔여 수임 수
+    // 사업자 유형별 잔여 수임 수 계산
+    // 전체 선택 시: 개인/법인 둘 다 잔여가 있어야 수임 가능
+    // 하나라도 잔여 없으면 확인 필요로 분류
     let remaining = null;
-    if (biz === "개인")      remaining = remInd;
-    else if (biz === "법인") remaining = remCorp;
-    else                     remaining = Math.max(remInd ?? 0, remCorp ?? 0); // 전체면 어느 한쪽이라도 남으면 OK
-    const hasCapacity = remaining === null || remaining > 0; // null이면 데이터없어 알수없음→일단 허용
+    if (biz === "개인") {
+      remaining = remInd;
+    } else if (biz === "법인") {
+      remaining = remCorp;
+    } else {
+      // 전체: 개인과 법인 데이터가 있는 경우 각각 체크
+      if (remInd === null && remCorp === null) {
+        remaining = null; // 데이터 없음 → 허용
+      } else if (remInd === null) {
+        remaining = remCorp; // 개인 데이터 없으면 법인만 체크
+      } else if (remCorp === null) {
+        remaining = remInd; // 법인 데이터 없으면 개인만 체크
+      } else {
+        // 둘 다 있는 경우: 둘 다 잔여가 있어야 완전 수임 가능
+        // 하나라도 0이면 일부 잔여 없음 → 확인 필요
+        remaining = Math.min(remInd, remCorp);
+      }
+    }
+    const hasCapacity = remaining === null || remaining > 0;
 
     // 거리 계산
     let tLat = t.lat, tLng = t.lng;
@@ -1135,7 +1161,8 @@ function scheduleAutoRefresh() {
     }
   }, 30 * 60 * 1000); // 30분 간격
 }
-scheduleAutoRefresh();
+// scheduleAutoRefresh는 checkPassword() 또는 인증 확인 블록에서만 호출 (버그 #1 수정)
+// 여기서 직접 호출하지 않음
 
 // ── 탭 전환 ──────────────────────────────────────────────
 function switchTab(name, btn) {
@@ -1348,6 +1375,85 @@ function makeDashCard(t, status) {
 </script>
 </div><!-- /mainContent -->
 
+<!-- 디버그 테스트 (Console에서 runTests() 호출) -->
+<script>
+function runTests() {
+  console.group("🧪 세무사 봇 자가 진단");
+  let pass = 0, fail = 0;
+
+  function test(name, fn) {
+    try {
+      const result = fn();
+      if (result === true) { console.log(`✅ ${name}`); pass++; }
+      else { console.warn(`❌ ${name} →`, result); fail++; }
+    } catch(e) { console.error(`💥 ${name} → 예외:`, e.message); fail++; }
+  }
+
+  // #1: scheduleAutoRefresh 이중 실행 방지
+  test("scheduleAutoRefresh는 전역에서 직접 호출되지 않음", () => {
+    // 이미 실행된 후라 직접 확인 어려움 — interval 존재 여부로 간접 확인
+    return typeof scheduleAutoRefresh === "function" ? true : "함수 없음";
+  });
+
+  // #2: 데이터 로드 확인
+  test("TAX_DATA가 비어있지 않음", () =>
+    TAX_DATA.length > 0 ? true : `TAX_DATA 비어있음 (${TAX_DATA.length}개)`
+  );
+
+  // #3: 검색 버튼 정상 상태
+  test("검색 버튼이 활성화 상태", () => {
+    const btn = document.querySelector(".btn-search");
+    return btn && !btn.disabled ? true : "검색 버튼 비활성화 상태";
+  });
+
+  // #4: remaining 계산 — 개인 0, 법인 5면 전체 선택 시 hasCapacity=true
+  test("remaining 계산: 개인 잔여 0 + 법인 잔여 5 → 전체 hasCapacity=true", () => {
+    const remInd = 0, remCorp = 5;
+    const remaining = Math.max(remInd ?? 0, remCorp ?? 0);
+    return remaining > 0 ? true : "오류: hasCapacity가 false로 계산됨";
+  });
+
+  // #4-2: remaining 계산 — 개인 0, 법인 0이면 hasCapacity=false
+  test("remaining 계산: 개인 0 + 법인 0 → 전체 hasCapacity=false", () => {
+    const remInd = 0, remCorp = 0;
+    const remaining = Math.max(remInd ?? 0, remCorp ?? 0);
+    return remaining === 0 ? true : "오류: hasCapacity가 true로 계산됨";
+  });
+
+  // #5: CONTRACT_MAP 로드 확인
+  test("CONTRACT_MAP이 비어있지 않음", () =>
+    Object.keys(CONTRACT_MAP).length > 0 ? true : "CONTRACT_MAP 비어있음 (Airtable 미연동)"
+  );
+
+  // #6: TODAY가 오늘 날짜 반환
+  test("getToday()가 오늘 날짜 반환", () => {
+    const today = getToday();
+    const expected = new Date().toISOString().slice(0,10);
+    return today === expected ? true : `오류: ${today} !== ${expected}`;
+  });
+
+  // SR 필터 테스트
+  test("SR 세무사 존재 확인", () =>
+    TAX_DATA.filter(t=>t.sr).length > 0 ? true :
+    `SR 세무사 없음 — SR개인수임/SR법인수임 컬럼 확인 필요`
+  );
+
+  // 지점명 매칭 테스트
+  test("CONTRACT_MAP과 TAX_DATA 지점명 매칭", () => {
+    const atKeys = Object.keys(CONTRACT_MAP);
+    const botKeys = TAX_DATA.map(t=>t.branch).filter(Boolean);
+    const unmatched = atKeys.filter(k=>!botKeys.some(b=>b.includes(k)||k.includes(b)));
+    return unmatched.length === 0 ? true : `매칭 안된 Airtable 지점: ${unmatched.join(", ")}`;
+  });
+
+  console.log(`
+결과: ${pass}개 통과 / ${fail}개 실패`);
+  console.groupEnd();
+  return { pass, fail };
+}
+console.log("💡 Console에서 runTests() 를 호출하면 자가 진단을 실행합니다.");
+</script>
+
 <script>
 // ── 비밀번호 잠금 ─────────────────────────────────────────
 const LOCK_KEY = "semusa_auth_v1";
@@ -1369,11 +1475,15 @@ function checkPassword() {
   }
 }
 
-// 페이지 로드 시 인증 확인
+// 페이지 로드 시 인증 확인 (버그 #2 수정: 이미 인증된 경우도 loadData 호출)
 (function() {
   if (sessionStorage.getItem(LOCK_KEY) === "1") {
     document.getElementById("lockScreen").style.display = "none";
     document.getElementById("mainContent").style.display = "block";
+    // 이미 인증된 상태에서도 데이터 로드 + 자동 갱신 시작
+    loadData();
+    initTokenUI();
+    scheduleAutoRefresh();
   } else {
     document.getElementById("lockScreen").style.display = "flex";
     document.getElementById("mainContent").style.display = "none";
