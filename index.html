@@ -852,7 +852,12 @@ function doSearch() {
                     || null;
 
   const candidates = TAX_DATA.map(t => {
-    if (srOnly && !t.sr) return null;
+    if (srOnly) {
+      // 사업자 유형에 맞는 SR 수임 여부 확인
+      if (biz === "개인" && t.srIndividual === null) return null;
+      if (biz === "법인" && t.srCorporate  === null) return null;
+      if (biz !== "개인" && biz !== "법인" && !t.sr)  return null;
+    }
 
     const ok      = (t.industries_ok + " " + t.specialty).toLowerCase().trim();
     const no      = (t.industries_no || "").toLowerCase().trim();
