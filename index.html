@@ -222,26 +222,45 @@
     .dashboard-grid{grid-template-columns:1fr 1fr;}
     #dashSummary{grid-template-columns:1fr;}
   }
+
+  /* ── 잠금 화면 ── */
+  .lock-overlay{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;}
+  .lock-box{background:var(--card);border-radius:16px;border:1px solid rgba(0,0,0,0.1);padding:40px 36px;width:100%;max-width:380px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.08);}
+  .lock-icon{font-size:28px;margin-bottom:12px;}
+  .lock-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px;}
+  .lock-desc{font-size:13px;color:var(--text-sub);margin-bottom:24px;}
+  .lock-input{width:100%;padding:12px 14px;font-size:15px;font-family:'Noto Sans KR',sans-serif;border:1.5px solid rgba(0,0,0,0.2);border-radius:8px;outline:none;margin-bottom:10px;text-align:center;letter-spacing:2px;}
+  .lock-error{font-size:12px;color:var(--danger);margin-bottom:10px;display:none;}
+  .lock-btn{width:100%;padding:12px;font-size:15px;font-weight:700;font-family:'Noto Sans KR',sans-serif;background:var(--primary);color:#fff;border:none;border-radius:8px;cursor:pointer;}
+
+  /* ── 섹션 구분선 ── */
+  .section-divider{display:flex;align-items:center;gap:8px;margin:20px 0 10px;}
+  .section-divider-label{font-size:12px;font-weight:700;padding:4px 14px;border-radius:20px;}
+  .section-divider-line{flex:1;height:1px;background:var(--border);}
+
+  /* ── 검색 로딩 ── */
+  .search-loading{padding:2rem;text-align:center;color:var(--text-sub);font-size:14px;}
+
+  /* ── 태그 색상 프리셋 ── */
+  .tag-blue{background:#E6F1FB;color:#185FA5;}
+  .tag-green{background:#E1F5EE;color:#0F6E56;}
+  .tag-purple{background:#EEEDFE;color:#3C3489;}
 </style>
 </head>
 <body>
 
 <!-- 비밀번호 잠금 화면 -->
-<div id="lockScreen" style="display:none;position:fixed;inset:0;background:#f8f8f6;z-index:9999;display:flex;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:16px;border:1px solid rgba(0,0,0,0.1);padding:40px 36px;width:100%;max-width:380px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-    <div style="font-size:28px;margin-bottom:12px">🔐</div>
-    <div style="font-size:18px;font-weight:700;color:#1a1a1a;margin-bottom:6px">세무사 배정 시스템</div>
-    <div style="font-size:13px;color:#6b6b6b;margin-bottom:24px">접속하려면 비밀번호를 입력해주세요.</div>
-    <input id="lockInput" type="password"
+<div id="lockScreen" class="lock-overlay" style="display:none;">
+  <div class="lock-box">
+    <div class="lock-icon">🔐</div>
+    <div class="lock-title">세무사 배정 시스템</div>
+    <div class="lock-desc">접속하려면 비밀번호를 입력해주세요.</div>
+    <input id="lockInput" class="lock-input" type="password"
       placeholder="비밀번호 입력"
-      style="width:100%;padding:12px 14px;font-size:15px;font-family:'Noto Sans KR',sans-serif;border:1.5px solid rgba(0,0,0,0.2);border-radius:8px;outline:none;margin-bottom:10px;text-align:center;letter-spacing:2px;"
       onkeydown="if(event.key==='Enter') checkPassword()"
     />
-    <div id="lockError" style="font-size:12px;color:#993C1D;margin-bottom:10px;display:none;">⚠️ 비밀번호가 올바르지 않습니다.</div>
-    <button onclick="checkPassword()"
-      style="width:100%;padding:12px;font-size:15px;font-weight:700;font-family:'Noto Sans KR',sans-serif;background:#0F6E56;color:#fff;border:none;border-radius:8px;cursor:pointer;">
-      입력
-    </button>
+    <div id="lockError" class="lock-error">⚠️ 비밀번호가 올바르지 않습니다.</div>
+    <button class="lock-btn" onclick="checkPassword()">입력</button>
   </div>
 </div>
 
@@ -411,20 +430,32 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQxPoON_qWplhsQpChFTxqAOVA-EgqIP5qpJ3jq6Y3pB3-Nj70DLXJ7QUtm8OuDNOZoFha97URx-VK6/pub?gid=0&single=true&output=csv";
-// 날짜 기반 캐시 키 — 함수로 매번 계산해서 자정 넘김 문제 방지 (버그 #6 수정)
-function getToday() { return new Date().toISOString().slice(0,10); }
-const LS_KEY_PREFIX = "semusa_data_";
+// ── 설정 상수 ────────────────────────────────────────────────
+const CSV_URL     = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQxPoON_qWplhsQpChFTxqAOVA-EgqIP5qpJ3jq6Y3pB3-Nj70DLXJ7QUtm8OuDNOZoFha97URx-VK6/pub?gid=0&single=true&output=csv";
+const WORKER_URL  = "https://savetax-airtable-proxy.suh-204.workers.dev/airtable";
+const LS_CONTRACT = "semusa_contract_v1";
+const LS_KEY_PREFIX  = "semusa_data_";
 const LS_META_PREFIX = "semusa_meta_";
-// LS_KEY/LS_META는 호출 시점의 날짜 기준으로 동적 생성
-Object.defineProperty(window, 'TODAY',  { get: () => getToday() });
-Object.defineProperty(window, 'LS_KEY', { get: () => LS_KEY_PREFIX  + getToday() });
-Object.defineProperty(window, 'LS_META',{ get: () => LS_META_PREFIX + getToday() });
-const LS_CONTRACT  = "semusa_contract_v1"; // Airtable는 실시간이라 날짜 무관
-const WORKER_URL   = "https://savetax-airtable-proxy.suh-204.workers.dev/airtable";
-let TAX_DATA       = [];
-let CONTRACT_MAP   = {}; // { "지점명": { individual: N, corporate: N } }
-let adminOpen      = false;
+const REFRESH_BTN_IDS = ["refreshBtn", "dashRefreshBtn"]; // 새로고침 버튼 ID 목록
+
+// ── 날짜 기반 동적 캐시 키 (자정 넘김 대응) ──────────────────
+function getToday() { return new Date().toISOString().slice(0, 10); }
+Object.defineProperty(window, 'TODAY',   { get: () => getToday() });
+Object.defineProperty(window, 'LS_KEY',  { get: () => LS_KEY_PREFIX  + getToday() });
+Object.defineProperty(window, 'LS_META', { get: () => LS_META_PREFIX + getToday() });
+
+// ── 유틸리티 ────────────────────────────────────────────────
+/** getElementById 단축 헬퍼 */
+const $ = id => document.getElementById(id);
+/** 날짜 객체를 "YYYY.MM.DD HH:mm" 형식으로 포맷 */
+const formatDateTime = dt => `${dt.getFullYear()}.${pad(dt.getMonth()+1)}.${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+/** 숫자를 2자리 문자열로 패딩 */
+function pad(n) { return String(n).padStart(2, "0"); }
+
+// ── 전역 상태 ────────────────────────────────────────────────
+let TAX_DATA     = [];
+let CONTRACT_MAP = {};  // { 지점명: { individual: N, corporate: N } }
+let adminOpen    = false;
 
 // ── 시/도별 시군구 ────────────────────────────────────────
 const REGIONS_LIST = [
@@ -457,11 +488,11 @@ let regionFocusIdx = -1;
 let districtFocusIdx = -1;
 
 function openRegionDrop() {
-  filterRegionOptions(document.getElementById("selRegionInput").value);
+  filterRegionOptions($("selRegionInput").value);
 }
 
 function filterRegionOptions(q) {
-  const drop = document.getElementById("regionDrop");
+  const drop = $("regionDrop");
   const filtered = q ? REGIONS_LIST.filter(r => r.includes(q)) : REGIONS_LIST;
   drop.innerHTML = "";
   // 전체 옵션
@@ -481,14 +512,14 @@ function makeOpt(val, label, type) {
 }
 
 function selectRegionOpt(val, label) {
-  document.getElementById("selRegion").value = val;
-  document.getElementById("selRegionInput").value = label === "전체" ? "" : label;
-  document.getElementById("regionDrop").style.display = "none";
+  $("selRegion").value = val;
+  $("selRegionInput").value = label === "전체" ? "" : label;
+  $("regionDrop").style.display = "none";
   updateDistricts(val);
 }
 
 function regionKeyNav(e) {
-  const drop = document.getElementById("regionDrop");
+  const drop = $("regionDrop");
   const opts = drop.querySelectorAll(".custom-opt");
   if (!opts.length) return;
   if (e.key === "ArrowDown") {
@@ -515,14 +546,14 @@ function regionKeyNav(e) {
 
 // 시/군/구
 function openDistrictDrop() {
-  filterDistrictOptions(document.getElementById("selDistrictInput").value);
+  filterDistrictOptions($("selDistrictInput").value);
 }
 
 function filterDistrictOptions(q) {
-  const region = document.getElementById("selRegion").value;
+  const region = $("selRegion").value;
   if (!region) return;
   const list = DISTRICTS[region] || [];
-  const drop = document.getElementById("districtDrop");
+  const drop = $("districtDrop");
   const filtered = q ? list.filter(d => d.includes(q)) : list;
   drop.innerHTML = "";
   const all = document.createElement("div");
@@ -542,13 +573,13 @@ function filterDistrictOptions(q) {
 }
 
 function selectDistrictOpt(val, label) {
-  document.getElementById("selDistrict").value = val;
-  document.getElementById("selDistrictInput").value = label === "전체" ? "" : label;
-  document.getElementById("districtDrop").style.display = "none";
+  $("selDistrict").value = val;
+  $("selDistrictInput").value = label === "전체" ? "" : label;
+  $("districtDrop").style.display = "none";
 }
 
 function districtKeyNav(e) {
-  const drop = document.getElementById("districtDrop");
+  const drop = $("districtDrop");
   const opts = drop.querySelectorAll(".custom-opt");
   if (!opts.length) return;
   if (e.key === "ArrowDown") {
@@ -574,9 +605,9 @@ function districtKeyNav(e) {
 }
 
 function updateDistricts(region) {
-  const inp = document.getElementById("selDistrictInput");
-  const hid = document.getElementById("selDistrict");
-  const drop = document.getElementById("districtDrop");
+  const inp = $("selDistrictInput");
+  const hid = $("selDistrict");
+  const drop = $("districtDrop");
   inp.value = ""; hid.value = ""; drop.style.display = "none";
   inp.disabled = !region;
   inp.placeholder = region ? "전체 (입력 또는 스크롤)" : "시/도를 먼저 선택하세요";
@@ -584,15 +615,15 @@ function updateDistricts(region) {
 
 // 드롭다운 외부 클릭 시 닫기
 document.addEventListener("click", e => {
-  if (!e.target.closest("#regionWrap"))   document.getElementById("regionDrop").style.display = "none";
-  if (!e.target.closest("#districtWrap")) document.getElementById("districtDrop").style.display = "none";
+  if (!e.target.closest("#regionWrap"))   $("regionDrop").style.display = "none";
+  if (!e.target.closest("#districtWrap")) $("districtDrop").style.display = "none";
 });
 
 // ── 관리자 ───────────────────────────────────────────────
 function toggleAdmin() {
   if (adminOpen) {
     adminOpen = false;
-    document.getElementById("adminPanel").classList.remove("open");
+    $("adminPanel").classList.remove("open");
     return;
   }
   const pw = prompt("관리자 비밀번호를 입력하세요.");
@@ -602,7 +633,7 @@ function toggleAdmin() {
     return;
   }
   adminOpen = true;
-  document.getElementById("adminPanel").classList.add("open");
+  $("adminPanel").classList.add("open");
 }
 
 // ── 데이터 로드 ──────────────────────────────────────────
@@ -611,48 +642,35 @@ function initTokenUI() {}
 
 // ── 수동 새로고침 ────────────────────────────────────────
 async function manualRefresh() {
-  // 버튼 비활성화
-  ["refreshBtn","dashRefreshBtn"].forEach(id => {
-    const btn = document.getElementById(id);
-    if (btn) { btn.textContent = "⏳ 불러오는 중..."; btn.disabled = true; }
-  });
+  // 헬퍼: 새로고침 버튼 일괄 상태 변경
+  const setRefreshBtns = (text, disabled) =>
+    REFRESH_BTN_IDS.forEach(id => {
+      const btn = $(id);
+      if (btn) { btn.textContent = text; btn.disabled = disabled; }
+    });
 
-  // 1단계: 화면 초기화 (값이 비워지는 느낌)
+  setRefreshBtns("⏳ 불러오는 중...", true);
   setStatus('<span class="spinner"></span>데이터 새로고침 중...');
-  const summary = document.getElementById("dashSummary");
-  const grid    = document.getElementById("dashGrid");
-  if (summary) summary.style.opacity = "0.3";
-  if (grid)    grid.style.opacity    = "0.3";
 
-  // 2단계: 캐시 무효화
+  // 대시보드 영역 흐리게 처리
+  const fadeEls = [$("dashSummary"), $("dashGrid")].filter(Boolean);
+  fadeEls.forEach(el => el.style.opacity = "0.3");
+
+  // 캐시 무효화 (날짜 기반 키 + 계약 캐시)
   Object.keys(localStorage).forEach(k => {
-    if (k.startsWith("semusa_data_") || k.startsWith("semusa_meta_")) {
-      localStorage.removeItem(k);
-    }
+    if (k.startsWith(LS_KEY_PREFIX) || k.startsWith(LS_META_PREFIX)) localStorage.removeItem(k);
   });
   localStorage.removeItem(LS_CONTRACT);
 
-  // 3단계: 데이터 새로 로드
   await loadData();
 
-  // 4단계: 화면 복구 (페이드인)
-  if (summary) { summary.style.transition = "opacity 0.4s"; summary.style.opacity = "1"; }
-  if (grid)    { grid.style.transition    = "opacity 0.4s"; grid.style.opacity    = "1"; }
+  // 페이드인 복구
+  fadeEls.forEach(el => { el.style.transition = "opacity 0.4s"; el.style.opacity = "1"; });
 
-  // 배정현황 탭 갱신
-  if (document.getElementById("tab-dashboard")?.classList.contains("active")) renderDashboard();
+  if ($("tab-dashboard")?.classList.contains("active")) renderDashboard();
 
-  // 버튼 복구
-  ["refreshBtn","dashRefreshBtn"].forEach(id => {
-    const btn = document.getElementById(id);
-    if (btn) { btn.textContent = "✅ 완료"; btn.disabled = false; }
-  });
-  setTimeout(() => {
-    ["refreshBtn","dashRefreshBtn"].forEach(id => {
-      const btn = document.getElementById(id);
-      if (btn) btn.textContent = "🔄 새로고침";
-    });
-  }, 2000);
+  setRefreshBtns("✅ 완료", false);
+  setTimeout(() => setRefreshBtns("🔄 새로고침", false), 2000);
 }
 
 async function loadData() {
@@ -705,14 +723,15 @@ async function loadAirtable() {
     if (data.error) throw new Error(data.error);
 
     CONTRACT_MAP = data.map || {};
+    buildContractIndex(); // O(1) 조회를 위한 역방향 인덱스 빌드
     localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, updatedAt: data.updatedAt || new Date().toISOString() }));
     updateStatusBar();
-    if (document.getElementById("tab-dashboard")?.classList.contains("active")) renderDashboard();
+    if ($("tab-dashboard")?.classList.contains("active")) renderDashboard();
 
   } catch(e) {
     // 실패 시 캐시 사용
     const cached = localStorage.getItem(LS_CONTRACT);
-    if (cached) CONTRACT_MAP = JSON.parse(cached).map || {};
+    if (cached) { CONTRACT_MAP = JSON.parse(cached).map || {}; buildContractIndex(); }
     updateStatusBar();
   }
 }
@@ -724,24 +743,21 @@ function updateStatusBar() {
     setStatus('⚠️ <span style="color:var(--danger)">데이터를 불러올 수 없습니다.</span>');
     return;
   }
-  const count = TAX_DATA.length || (meta ? meta.count : 0);
-  const src = meta ? (meta.source === "Google Sheets" ? "☁️ Google Sheets" : `📦 ${meta.source}`) : "📦 캐시";
-  const atStatus = Object.keys(CONTRACT_MAP).length > 0
-    ? `🔄 계약현황 실시간 연동`
-    : contractCache ? `📦 계약현황 캐시` : `⚠️ 계약현황 로드 실패`;
-  const dt = meta ? new Date(meta.updatedAt) : new Date();
-  const d = `${dt.getFullYear()}.${pad(dt.getMonth()+1)}.${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+  const count    = TAX_DATA.length || meta?.count || 0;
+  const src      = meta ? (meta.source === "Google Sheets" ? "☁️ Google Sheets" : `📦 ${meta.source}`) : "📦 캐시";
+  const atStatus = Object.keys(CONTRACT_MAP).length > 0 ? "🔄 계약현황 실시간 연동"
+                 : contractCache ? "📦 계약현황 캐시" : "⚠️ 계약현황 로드 실패";
+  const d = formatDateTime(meta ? new Date(meta.updatedAt) : new Date());
   setStatus(`✅ <strong>${count}명</strong> &nbsp;·&nbsp; 세무사정보: <strong>${d}</strong> (${src}) &nbsp;·&nbsp; ${atStatus}`);
 }
 
 function showStatus(meta, cached=false) { updateStatusBar(); }
-function setStatus(html) { document.getElementById("statusText").innerHTML = html; }
-function pad(n) { return String(n).padStart(2,"0"); }
+function setStatus(html) { $("statusText").innerHTML = html; }
 
 // ── 파일 업로드 ──────────────────────────────────────────
 function handleFile(file) {
   if (!file) return;
-  const us = document.getElementById("uploadStatus");
+  const us = $("uploadStatus");
   us.style.display="block"; us.style.background="#f5f5f3"; us.style.color="#6b6b6b";
   us.innerHTML='<span class="spinner"></span>파일 읽는 중...';
   const reader = new FileReader();
@@ -846,18 +862,20 @@ const DISTRICT_COORDS = {
   "광산구":[35.1396,126.7937],"유성구":[36.3621,127.3564],
 };
 
+// METRO_SET: Array.includes O(n) → Set.has O(1)
+const METRO_SET = new Set(["서울","경기","인천","부산","대구","울산","대전","광주","충청","전라","경상","강원","제주","충청남도","충청북도","전라남도","전라북도","경상남도","경상북도","세종"]);
+
 function coordFromAddress(addr) {
   if (!addr) return null;
-  // 1순위: 구/군 단위 (DISTRICT_COORDS)
+  // 1순위: 구/군 단위
   for (const [k,v] of Object.entries(DISTRICT_COORDS)) { if (addr.includes(k)) return v; }
-  // 2순위: 시군구 단위 (SEARCH_COORDS 중 광역시도 제외한 것 먼저)
-  const METRO = ["서울","경기","인천","부산","대구","울산","대전","광주","충청","전라","경상","강원","제주","충청남도","충청북도","전라남도","전라북도","경상남도","경상북도","세종"];
+  // 2순위: 시군구 단위 (광역 제외)
   for (const [k,v] of Object.entries(SEARCH_COORDS)) {
-    if (!METRO.includes(k) && addr.includes(k)) return v;
+    if (!METRO_SET.has(k) && addr.includes(k)) return v;
   }
   // 3순위: 광역시도 단위
   for (const [k,v] of Object.entries(SEARCH_COORDS)) {
-    if (METRO.includes(k) && addr.includes(k)) return v;
+    if (METRO_SET.has(k) && addr.includes(k)) return v;
   }
   return null;
 }
@@ -883,32 +901,31 @@ function formatName(t) {
 
 function doSearch() {
   // 업종 필수 체크
-  const industryRaw = document.getElementById("searchInput").value.trim();
-  const hint = document.getElementById("requiredHint");
-  if (!industryRaw) { hint.classList.add("show"); document.getElementById("searchInput").focus(); return; }
+  const industryRaw = $("searchInput").value.trim();
+  const hint = $("requiredHint");
+  if (!industryRaw) { hint.classList.add("show"); $("searchInput").focus(); return; }
   hint.classList.remove("show");
 
   if (!TAX_DATA.length) {
-    document.getElementById("results").innerHTML = `<div class="empty-state">데이터가 없습니다. 잠시 후 새로고침해주세요.</div>`;
+    $("results").innerHTML = `<div class="empty-state">데이터가 없습니다. 잠시 후 새로고침해주세요.</div>`;
     return;
   }
 
-  // 검색 버튼 로딩 표시 (버그 #3 수정: 클로저로 searchBtn 안전하게 참조)
+  // 검색 버튼 로딩 표시 (클로저로 searchBtn 안전하게 캡처)
   const searchBtn = document.querySelector(".btn-search");
   if (searchBtn) { searchBtn.textContent = "검색 중..."; searchBtn.disabled = true; }
 
   // 로딩 스피너 표시
-  document.getElementById("results").innerHTML = `<div style="padding:2rem;text-align:center;color:var(--text-sub);font-size:14px"><span class="spinner"></span>검색 중...</div>`;
+  $("results").innerHTML = `<div class="search-loading"><span class="spinner"></span>검색 중...</div>`;
 
   // 300ms 후 결과 표시
   setTimeout(() => {
-    // searchBtn을 클로저로 캡처했으므로 안전하게 복원
     if (searchBtn) { searchBtn.textContent = "검색하기"; searchBtn.disabled = false; }
 
-  const region   = document.getElementById("selRegion").value;
-  const district = document.getElementById("selDistrict").value;
-  const biz      = document.getElementById("selBiz").value;
-  const srOnly   = document.getElementById("chkSR").checked;
+  const region   = $("selRegion").value;
+  const district = $("selDistrict").value;
+  const biz      = $("selBiz").value;
+  const srOnly   = $("chkSR").checked;
   const industries = industryRaw.split(/[,，、]/).map(s=>s.trim()).filter(Boolean);
 
   // 검색 기준 좌표: 시군구 우선, 없으면 시도
@@ -1007,26 +1024,45 @@ function doSearch() {
 }
 
 // ── 렌더링 ───────────────────────────────────────────────
-function getRemaining(t) {
-  // Google Sheets 최대 수임 수 - Airtable 실제 계약 수
-  // 지점명(slack) 또는 상호로 매칭 시도
-  const keys = [t.branch, t.firm, t.name].filter(Boolean);
-  let contract = null;
-  for (const k of keys) {
-    if (CONTRACT_MAP[k]) { contract = CONTRACT_MAP[k]; break; }
-    // 부분 매칭 (예: "SAVETAX 삼성지점" ↔ "삼성지점")
-    const matched = Object.keys(CONTRACT_MAP).find(ck =>
-      ck.includes(k) || k.includes(ck)
-    );
-    if (matched) { contract = CONTRACT_MAP[matched]; break; }
+/**
+ * CONTRACT_MAP의 역방향 조회 인덱스 (지점명 → contractKey).
+ * CONTRACT_MAP 업데이트 시 buildContractIndex()로 재빌드.
+ * getRemaining 내 Object.keys 반복 O(n) → Map 조회 O(1) 개선.
+ */
+let _contractIndex = new Map(); // key: 지점명 소문자, value: CONTRACT_MAP 키
+
+function buildContractIndex() {
+  _contractIndex = new Map();
+  for (const ck of Object.keys(CONTRACT_MAP)) {
+    _contractIndex.set(ck.toLowerCase(), ck);
+    // 부분 매칭 대비: 각 단어도 등록
+    for (const word of ck.split(/\s+/)) {
+      if (word.length > 1 && !_contractIndex.has(word.toLowerCase())) {
+        _contractIndex.set(word.toLowerCase(), ck);
+      }
+    }
   }
+}
+
+function getRemaining(t) {
+  // 1차: 정확히 일치 (O(1))
+  let contractKey = null;
+  const keys = [t.branch, t.firm, t.name].filter(Boolean);
+  for (const k of keys) {
+    const direct = CONTRACT_MAP[k];
+    if (direct) { contractKey = k; break; }
+    // 2차: 인덱스 기반 소문자 매칭 (O(1))
+    const idxKey = _contractIndex.get(k.toLowerCase());
+    if (idxKey) { contractKey = idxKey; break; }
+  }
+  const contract = contractKey ? CONTRACT_MAP[contractKey] : null;
   const usedInd  = contract ? contract.individual : 0;
   const usedCorp = contract ? contract.corporate  : 0;
-  // SR 세무사는 SR전용 수임 가능 수 우선 사용
+  // SR 세무사는 SR 전용 수임 가능 수 우선 사용
   const maxInd  = (t.sr && t.srIndividual !== null) ? t.srIndividual : t.individual;
   const maxCorp = (t.sr && t.srCorporate  !== null) ? t.srCorporate  : t.corporate;
-  const remInd   = maxInd  !== null ? Math.max(0, maxInd  - usedInd)  : null;
-  const remCorp  = maxCorp !== null ? Math.max(0, maxCorp - usedCorp) : null;
+  const remInd  = maxInd  !== null ? Math.max(0, maxInd  - usedInd)  : null;
+  const remCorp = maxCorp !== null ? Math.max(0, maxCorp - usedCorp) : null;
   return { remInd, remCorp, usedInd, usedCorp };
 }
 
@@ -1048,22 +1084,25 @@ function capInfo(t, biz) {
 }
 
 function renderResults(list, q) {
-  const el = document.getElementById("results");
+  const el = $("results");
   let tags = "";
-  if (q.region)            tags+=`<span class="tag" style="background:#E6F1FB;color:#185FA5">📍 ${q.region}${q.district?" "+q.district:""}</span>`;
-  if (q.industries.length) tags+=`<span class="tag" style="background:#E1F5EE;color:#0F6E56">🏭 ${q.industries.join(", ")}</span>`;
-  if (q.biz)               tags+=`<span class="tag" style="background:#EEEDFE;color:#3C3489">🏢 ${q.biz==="개인"?"개인사업자":"법인사업자"}</span>`;
-  if (q.srOnly)            tags+=`<span class="tag" style="background:#E6F1FB;color:#185FA5">SR수임</span>`;
+  if (q.region)            tags+=`<span class="tag tag-blue">📍 ${q.region}${q.district?" "+q.district:""}</span>`;
+  if (q.industries.length) tags+=`<span class="tag tag-green">🏭 ${q.industries.join(", ")}</span>`;
+  if (q.biz)               tags+=`<span class="tag tag-purple">🏢 ${q.biz==="개인"?"개인사업자":"법인사업자"}</span>`;
+  if (q.srOnly)            tags+=`<span class="tag tag-blue">SR수임</span>`;
 
   if (!list.length) {
     el.innerHTML=`<div class="result-header">${tags}</div><div class="empty-state">조건에 맞는 세무사가 없습니다.<br><span style="font-size:13px;margin-top:6px;display:block">업종명을 다르게 입력하거나 지역 조건을 넓혀보세요.</span></div>`;
     return;
   }
 
-  const SECTION_LABELS = {
-    "A": null,
-    "B": { text:"확인 필요 (수임 가능 · 잔여 없음 또는 업종 불명확)", bg:"#FAEEDA", col:"#854F0B" },
-    "C": { text:"수임 불가", bg:"#FAECE7", col:"#993C1D" },
+  // SECTION_CONFIG: 섹션별 스타일·텍스트 중앙 관리 (DRY 적용)
+  const SECTION_CONFIG = {
+    A: { dividerText: null,   bg: "#E1F5EE", col: "#0F6E56", badge: "수임 가능"  },
+    B: { dividerText: "확인 필요 (수임 가능 · 잔여 없음 또는 업종 불명확)",
+         bg: "#FAEEDA", col: "#854F0B", badge: "확인 필요"  },
+    C: { dividerText: "수임 불가",
+         bg: "#FAECE7", col: "#993C1D", badge: "수임 불가"  },
   };
 
   let html = `<div class="result-header">${tags}<span class="result-count">— <strong>${list.length}명</strong> 매칭</span></div>`;
@@ -1073,27 +1112,19 @@ function renderResults(list, q) {
     // 섹션 구분선
     if (t.section !== lastSection) {
       lastSection = t.section;
-      const lbl = SECTION_LABELS[t.section];
-      if (lbl) {
-        html += `<div style="display:flex;align-items:center;gap:8px;margin:20px 0 10px;">
-          <span style="font-size:12px;font-weight:700;padding:4px 14px;border-radius:20px;background:${lbl.bg};color:${lbl.col}">${lbl.text}</span>
-          <div style="flex:1;height:1px;background:var(--border)"></div>
+      const sc = SECTION_CONFIG[t.section];
+      if (sc.dividerText) {
+        html += `<div class="section-divider">
+          <span class="section-divider-label" style="background:${sc.bg};color:${sc.col}">${sc.dividerText}</span>
+          <div class="section-divider-line"></div>
         </div>`;
       }
     }
 
     const cap = capInfo(t, q.biz);
 
-    // 뱃지 스타일
-    const sBg  = t.section==="A" ? "#E1F5EE" : t.section==="B" ? "#FAEEDA" : "#FAECE7";
-    const sCol = t.section==="A" ? "#0F6E56" : t.section==="B" ? "#854F0B" : "#993C1D";
-    const sLbl = t.section==="A" ? "수임 가능" : t.section==="B" ? "확인 필요" : "수임 불가";
-    // 잔여 수임 표시 (B: 잔여0 강조)
-    if (t.section==="B" && t.remaining !== null && t.remaining === 0) {
-      if (!cap) { /* cap이 없으면 잔여0 직접 표시 */ }
-    }
-
-    // 카드 스타일
+    // SECTION_CONFIG로 섹션별 스타일 일괄 관리 (중복 삼항연산자 제거)
+    const SC = SECTION_CONFIG[t.section];
     const borderStyle = t.section==="A" ? "border:1.5px solid var(--primary-mid)" : "border:1px solid var(--border)";
     const avatarCls   = t.section==="A" ? "avail" : "unavail";
 
@@ -1116,7 +1147,7 @@ function renderResults(list, q) {
     html += distBadge;
     html += `</div></div></div>`;
     html += `<div class="card-right">`;
-    html += `<span class="badge-status" style="background:${sBg};color:${sCol}">${sLbl}</span>`;
+    html += `<span class="badge-status" style="background:${SC.bg};color:${SC.col}">${SC.badge}</span>`;
     if (cap) html += `<span class="cap-text">${cap}</span>`;
     html += `</div></div>`;
     html += `<div class="card-info">`;
@@ -1145,7 +1176,7 @@ function renderResults(list, q) {
   el.innerHTML = html;
 }
 
-document.getElementById("searchInput").addEventListener("keydown", e=>{ if(e.key==="Enter") doSearch(); });
+$("searchInput").addEventListener("keydown", e=>{ if(e.key==="Enter") doSearch(); });
 // loadData와 scheduleAutoRefresh는 잠금 해제 후 호출됨
 
 // ── 자동 갱신 (업무시간 9~19시, 30분 간격) ───────────────
@@ -1155,7 +1186,7 @@ function scheduleAutoRefresh() {
     if (h >= 9 && h < 19) {
       loadData();
       // 배정현황 탭이 열려있으면 대시보드도 갱신
-      if (document.getElementById("tab-dashboard")?.classList.contains("active")) {
+      if ($("tab-dashboard")?.classList.contains("active")) {
         renderDashboard();
       }
     }
@@ -1168,7 +1199,7 @@ function scheduleAutoRefresh() {
 function switchTab(name, btn) {
   document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
   document.querySelectorAll(".tab-btn").forEach(el => el.classList.remove("active"));
-  document.getElementById("tab-" + name).classList.add("active");
+  $("tab-" + name).classList.add("active");
   btn.classList.add("active");
   if (name === "dashboard") renderDashboard();
 }
@@ -1201,8 +1232,8 @@ function isFullyBooked(t) { return getBookingStatus(t) === "full"; }
 
 // ── 배정 현황 렌더링 ──────────────────────────────────────
 function renderDashboard() {
-  const grid = document.getElementById("dashGrid");
-  const updEl = document.getElementById("dashUpdated");
+  const grid = $("dashGrid");
+  const updEl = $("dashUpdated");
 
   if (!TAX_DATA.length) {
     grid.innerHTML = `<div style="font-size:14px;color:var(--text-sub);padding:2rem;text-align:center">세무사 데이터가 없습니다. 새로고침해주세요.</div>`;
@@ -1218,8 +1249,8 @@ function renderDashboard() {
     updEl.textContent = "⚠️ 계약 현황 미연동 — 관리자 패널에서 토큰을 설정해주세요.";
   }
 
-  const srIndOnly  = document.getElementById("dashSrIndOnly")?.checked  || false;
-  const srCorpOnly = document.getElementById("dashSrCorpOnly")?.checked || false;
+  const srIndOnly  = $("dashSrIndOnly")?.checked  || false;
+  const srCorpOnly = $("dashSrCorpOnly")?.checked || false;
 
   // ── 총계 계산 ────────────────────────────────────────────
   let totalMaxInd = 0, totalMaxCorp = 0;
@@ -1273,7 +1304,7 @@ function renderDashboard() {
     </div>`;
   }
 
-  const summaryEl = document.getElementById("dashSummary");
+  const summaryEl = $("dashSummary");
   if (summaryEl) {
     summaryEl.innerHTML =
       summaryCard("법인 전체",   totalMaxCorp,   totalUsedCorp,   totalRemCorp,   "#185FA5") +
@@ -1456,37 +1487,41 @@ console.log("💡 Console에서 runTests() 를 호출하면 자가 진단을 실
 
 <script>
 // ── 비밀번호 잠금 ─────────────────────────────────────────
-const LOCK_KEY = "semusa_auth_v1";
-const LOCK_PW  = "unitblack26@!";
+const LOCK_KEY  = "semusa_auth_v1";
+// 비밀번호는 SHA-256 해시로만 저장 — 원문은 코드에 없음
+const LOCK_HASH = "96e769f0354c28525960af56798aacff08ceeba7f70c9e4f5bfdbbd8da7d9fbd";
 
-function checkPassword() {
-  const val = document.getElementById("lockInput").value;
-  if (val === LOCK_PW) {
+/** 잠금 해제 후 앱 초기화 공통 로직 */
+function unlockAndInit() {
+  $("lockScreen").style.display = "none";
+  $("mainContent").style.display = "block";
+  loadData();
+  initTokenUI();
+  scheduleAutoRefresh();
+}
+
+async function checkPassword() {
+  const val = $("lockInput").value;
+  // 입력값을 SHA-256 해시로 변환 후 저장된 해시와 비교
+  const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(val));
+  const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2,"0")).join("");
+  if (hashHex === LOCK_HASH) {
     sessionStorage.setItem(LOCK_KEY, "1");
-    document.getElementById("lockScreen").style.display = "none";
-    document.getElementById("mainContent").style.display = "block";
-    loadData();
-    initTokenUI();
-    scheduleAutoRefresh();
+    unlockAndInit();
   } else {
-    document.getElementById("lockError").style.display = "block";
-    document.getElementById("lockInput").value = "";
-    document.getElementById("lockInput").focus();
+    $("lockError").style.display = "block";
+    $("lockInput").value = "";
+    $("lockInput").focus();
   }
 }
 
-// 페이지 로드 시 인증 확인 (버그 #2 수정: 이미 인증된 경우도 loadData 호출)
+// 페이지 로드 시 인증 확인
 (function() {
   if (sessionStorage.getItem(LOCK_KEY) === "1") {
-    document.getElementById("lockScreen").style.display = "none";
-    document.getElementById("mainContent").style.display = "block";
-    // 이미 인증된 상태에서도 데이터 로드 + 자동 갱신 시작
-    loadData();
-    initTokenUI();
-    scheduleAutoRefresh();
+    unlockAndInit(); // 이미 인증된 경우에도 동일한 초기화 로직 실행
   } else {
-    document.getElementById("lockScreen").style.display = "flex";
-    document.getElementById("mainContent").style.display = "none";
+    $("lockScreen").style.display = "flex";
+    $("mainContent").style.display = "none";
   }
 })();
 </script>
