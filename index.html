@@ -188,9 +188,9 @@
     border-radius:20px;background:var(--bg);transition:all 0.15s;user-select:none;
   }
   .sr-filter-label:hover{border-color:var(--primary);color:var(--primary);}
-  #dashSrOnly{display:none;}
-  #dashSrOnly:checked ~ span:last-child{color:var(--primary);font-weight:700;}
+  .sr-filter-label input[type=checkbox]{display:none;}
   .sr-filter-label:has(input:checked){background:var(--primary-light);border-color:var(--primary);}
+  .sr-filter-label:has(input:checked) span:last-child{color:var(--primary);font-weight:700;}
 
   /* 배정 현황판 섹션 */
   .dash-section-title{
@@ -386,10 +386,15 @@
         <button class="dash-filter-btn"        data-filter="full"   onclick="setDashFilter('full',this)"  >🔴 수임 불가</button>
       </div>
       <!-- SR 필터 -->
-      <label class="sr-filter-label" id="srFilterLabel">
-        <input type="checkbox" id="dashSrOnly" onchange="renderDashboard()">
-        <span class="chk-box" id="dashSrChkBox"></span>
-        <span>SR수임 가능만 보기</span>
+      <label class="sr-filter-label">
+        <input type="checkbox" id="dashSrIndOnly" onchange="renderDashboard()">
+        <span class="chk-box"></span>
+        <span>SR개인 가능만 보기</span>
+      </label>
+      <label class="sr-filter-label">
+        <input type="checkbox" id="dashSrCorpOnly" onchange="renderDashboard()">
+        <span class="chk-box"></span>
+        <span>SR법인 가능만 보기</span>
       </label>
     </div>
 
@@ -1123,7 +1128,8 @@ function renderDashboard() {
     updEl.textContent = "⚠️ 계약 현황 미연동 — 관리자 패널에서 토큰을 설정해주세요.";
   }
 
-  const srOnly = document.getElementById("dashSrOnly")?.checked || false;
+  const srIndOnly  = document.getElementById("dashSrIndOnly")?.checked  || false;
+  const srCorpOnly = document.getElementById("dashSrCorpOnly")?.checked || false;
 
   // ── 총계 계산 ────────────────────────────────────────────
   let totalMaxInd = 0, totalMaxCorp = 0;
@@ -1191,7 +1197,8 @@ function renderDashboard() {
   let list = TAX_DATA.filter(t => t.individual !== null || t.corporate !== null);
 
   // SR 필터
-  if (srOnly) list = list.filter(t => t.sr === true);
+  if (srIndOnly)  list = list.filter(t => t.srIndividual !== null);
+  if (srCorpOnly) list = list.filter(t => t.srCorporate  !== null);
 
   // 수임 상태 필터
   if (dashFilter !== "all") list = list.filter(t => getBookingStatus(t) === dashFilter);
