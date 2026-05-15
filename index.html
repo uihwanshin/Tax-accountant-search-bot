@@ -886,12 +886,16 @@ function doSearch() {
     return;
   }
 
-  // 기존 결과 흐리게 처리
-  const resultsEl = document.getElementById("results");
-  if (resultsEl.innerHTML) {
-    resultsEl.style.transition = "opacity 0.15s";
-    resultsEl.style.opacity = "0.3";
-  }
+  // 검색 버튼 로딩 표시
+  const searchBtn = document.querySelector(".btn-search");
+  if (searchBtn) { searchBtn.textContent = "검색 중..."; searchBtn.disabled = true; }
+
+  // 로딩 스피너 표시
+  document.getElementById("results").innerHTML = `<div style="padding:2rem;text-align:center;color:var(--text-sub);font-size:14px"><span class="spinner"></span>검색 중...</div>`;
+
+  // 300ms 후 결과 표시 (로딩 느낌)
+  setTimeout(() => {
+    if (searchBtn) { searchBtn.textContent = "검색하기"; searchBtn.disabled = false; }
 
   const region   = document.getElementById("selRegion").value;
   const district = document.getElementById("selDistrict").value;
@@ -972,7 +976,8 @@ function doSearch() {
     return a.distKm - b.distKm;
   });
 
-  renderResults(candidates, { region, district, biz, srOnly, industries, searchCoord });
+    renderResults(candidates, { region, district, biz, srOnly, industries, searchCoord });
+  }, 300);
 }
 
 // ── 렌더링 ───────────────────────────────────────────────
@@ -1018,7 +1023,6 @@ function capInfo(t, biz) {
 
 function renderResults(list, q) {
   const el = document.getElementById("results");
-  el.style.opacity = "0.3";
   let tags = "";
   if (q.region)            tags+=`<span class="tag" style="background:#E6F1FB;color:#185FA5">📍 ${q.region}${q.district?" "+q.district:""}</span>`;
   if (q.industries.length) tags+=`<span class="tag" style="background:#E1F5EE;color:#0F6E56">🏭 ${q.industries.join(", ")}</span>`;
@@ -1113,11 +1117,6 @@ function renderResults(list, q) {
   });
 
   el.innerHTML = html;
-  // 페이드 인
-  requestAnimationFrame(() => {
-    el.style.transition = "opacity 0.3s";
-    el.style.opacity = "1";
-  });
 }
 
 document.getElementById("searchInput").addEventListener("keydown", e=>{ if(e.key==="Enter") doSearch(); });
