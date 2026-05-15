@@ -714,12 +714,13 @@ function finishUpload(rows, filename, us) {
 
 // ── 파싱 ────────────────────────────────────────────────
 function parseRow(r) {
-  const srIndRaw  = r["SR개인수임"];
-  const srCorpRaw = r["SR법인수임"];
-  const srIndNum  = srIndRaw  !== "" && srIndRaw  !== undefined ? Number(srIndRaw)  : null;
-  const srCorpNum = srCorpRaw !== "" && srCorpRaw !== undefined ? Number(srCorpRaw) : null;
-  // SR개인수임 또는 SR법인수임 값이 있으면 SR 세무사로 판단
-  const sr = (srIndNum !== null && !isNaN(srIndNum)) || (srCorpNum !== null && !isNaN(srCorpNum));
+  // SR개인수임/SR법인수임 = 체크박스 (checked/빈값)
+  const srIndChecked  = String(r["SR개인수임"] || "").toLowerCase() === "checked" || r["SR개인수임"] === true || r["SR개인수임"] === "TRUE";
+  const srCorpChecked = String(r["SR법인수임"] || "").toLowerCase() === "checked" || r["SR법인수임"] === true || r["SR법인수임"] === "TRUE";
+  const sr = srIndChecked || srCorpChecked;
+  // SR 수임 가능 개수 = SR 체크된 경우 개인/법인 수임 컬럼 값 사용
+  const srIndNum  = srIndChecked  ? (r["개인 수임"] !== "" && r["개인 수임"] !== undefined ? Number(r["개인 수임"]) : null) : null;
+  const srCorpNum = srCorpChecked ? (r["법인 수임"] !== "" && r["법인 수임"] !== undefined ? Number(r["법인 수임"]) : null) : null;
   const avRaw = String(r["배정가능여부"]||"");
   const available = avRaw.includes("가능")&&!avRaw.includes("불")?"가능":avRaw.includes("불")?"불가능":"unknown";
   return {
