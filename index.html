@@ -1136,13 +1136,14 @@ function renderDashboard() {
     const { usedInd, usedCorp } = getRemaining(t);
     if (t.individual !== null) totalMaxInd  += t.individual;
     if (t.corporate  !== null) totalMaxCorp += t.corporate;
-    if (t.sr) {
-      // SR 개인/법인 수임 가능 수: SR전용 컬럼 우선, 없으면 일반 컬럼 사용
-      const srInd  = t.srIndividual !== null ? t.srIndividual : (t.individual !== null ? t.individual : 0);
-      const srCorp = t.srCorporate  !== null ? t.srCorporate  : (t.corporate  !== null ? t.corporate  : 0);
-      totalMaxSRInd  += srInd;
-      totalMaxSRCorp += srCorp;
-      totalUsedSRInd  += usedInd;
+    // SR개인수임 체크된 세무사만 SR·개인 합산
+    if (t.srIndividual !== null) {
+      totalMaxSRInd  += t.srIndividual;
+      totalUsedSRInd += usedInd;
+    }
+    // SR법인수임 체크된 세무사만 SR·법인 합산
+    if (t.srCorporate !== null) {
+      totalMaxSRCorp  += t.srCorporate;
       totalUsedSRCorp += usedCorp;
     }
     totalUsedInd  += usedInd;
