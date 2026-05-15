@@ -886,6 +886,13 @@ function doSearch() {
     return;
   }
 
+  // 기존 결과 흐리게 처리
+  const resultsEl = document.getElementById("results");
+  if (resultsEl.innerHTML) {
+    resultsEl.style.transition = "opacity 0.15s";
+    resultsEl.style.opacity = "0.3";
+  }
+
   const region   = document.getElementById("selRegion").value;
   const district = document.getElementById("selDistrict").value;
   const biz      = document.getElementById("selBiz").value;
@@ -1011,6 +1018,7 @@ function capInfo(t, biz) {
 
 function renderResults(list, q) {
   const el = document.getElementById("results");
+  el.style.opacity = "0.3";
   let tags = "";
   if (q.region)            tags+=`<span class="tag" style="background:#E6F1FB;color:#185FA5">📍 ${q.region}${q.district?" "+q.district:""}</span>`;
   if (q.industries.length) tags+=`<span class="tag" style="background:#E1F5EE;color:#0F6E56">🏭 ${q.industries.join(", ")}</span>`;
@@ -1105,6 +1113,11 @@ function renderResults(list, q) {
   });
 
   el.innerHTML = html;
+  // 페이드 인
+  requestAnimationFrame(() => {
+    el.style.transition = "opacity 0.3s";
+    el.style.opacity = "1";
+  });
 }
 
 document.getElementById("searchInput").addEventListener("keydown", e=>{ if(e.key==="Enter") doSearch(); });
