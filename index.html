@@ -1185,8 +1185,10 @@ function doSearch() {
   const srOnly   = document.getElementById("chkSR").checked;
   const industries = industryRaw.split(/[,，、]/).map(s=>s.trim()).filter(Boolean);
 
-  // 검색 기준 좌표: 시군구 우선, 없으면 시도
-  const searchCoord = (district && (DISTRICT_COORDS[district]||SEARCH_COORDS[district]))
+  // 검색 기준 좌표: region+district 조합 키 우선 (서울강남구, 부산강서구 등)
+  const regionDistrictKey = region && district ? region + district : null;
+  const searchCoord = (regionDistrictKey && DISTRICT_COORDS[regionDistrictKey])
+                    || (district && (DISTRICT_COORDS[district] || SEARCH_COORDS[district]))
                     || (region && SEARCH_COORDS[region])
                     || null;
 
