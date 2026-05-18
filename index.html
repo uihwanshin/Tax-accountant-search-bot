@@ -443,6 +443,25 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
+/** getElementById 단축 헬퍼 — 스크립트 전체에서 사용 */
+const $ = id => document.getElementById(id);
+
+/** 날짜 포맷 유틸 */
+const formatDateTime = dt => `${dt.getFullYear()}.${String(dt.getMonth()+1).padStart(2,"0")}.${String(dt.getDate()).padStart(2,"0")} ${String(dt.getHours()).padStart(2,"0")}:${String(dt.getMinutes()).padStart(2,"0")}`;
+
+/** CONTRACT_MAP 역방향 조회 인덱스 (O(1) 조회용) */
+let _contractIndex = new Map();
+function buildContractIndex() {
+  _contractIndex = new Map();
+  for (const ck of Object.keys(CONTRACT_MAP)) {
+    _contractIndex.set(ck.toLowerCase(), ck);
+    for (const word of ck.split(" ")) {
+      if (word.length > 1 && !_contractIndex.has(word.toLowerCase()))
+        _contractIndex.set(word.toLowerCase(), ck);
+    }
+  }
+}
+
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQxPoON_qWplhsQpChFTxqAOVA-EgqIP5qpJ3jq6Y3pB3-Nj70DLXJ7QUtm8OuDNOZoFha97URx-VK6/pub?gid=0&single=true&output=csv";
 // 날짜 기반 캐시 키 — 함수로 매번 계산해서 자정 넘김 문제 방지 (버그 #6 수정)
 function getToday() { return new Date().toISOString().slice(0,10); }
