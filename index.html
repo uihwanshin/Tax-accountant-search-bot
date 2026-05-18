@@ -1852,12 +1852,14 @@ console.log("💡 Console에서 runTests() 를 호출하면 자가 진단을 실
 
 <script>
 // ── 비밀번호 잠금 ─────────────────────────────────────────
-const LOCK_KEY = "semusa_auth_v1";
-const LOCK_PW  = "unitblack26@!";
+const LOCK_KEY  = "semusa_auth_v1";
+const LOCK_HASH = "96e769f0354c28525960af56798aacff08ceeba7f70c9e4f5bfdbbd8da7d9fbd";
 
-function checkPassword() {
+async function checkPassword() {
   const val = document.getElementById("lockInput").value;
-  if (val === LOCK_PW) {
+  const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(val));
+  const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2,"0")).join("");
+  if (hashHex === LOCK_HASH) {
     sessionStorage.setItem(LOCK_KEY, "1");
     document.getElementById("lockScreen").style.display = "none";
     document.getElementById("mainContent").style.display = "block";
