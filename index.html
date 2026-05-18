@@ -1706,11 +1706,26 @@ function renderLookup(results, q) {
         </div>
       </div>
       <div style="font-size:12px;color:${c.color};margin-bottom:6px;">${c.desc}</div>
-      <div style="display:flex;gap:14px;font-size:12px;color:var(--text-sub);flex-wrap:wrap;">
+      <div style="display:flex;gap:14px;font-size:12px;color:var(--text-sub);flex-wrap:wrap;margin-bottom:${(r.churnReason||r.churnCategory||r.churnReasonLegacy||churnItems)?"6px":"0"}">
+        ${r.status       ? `<span>📋 <strong>${r.status}</strong></span>` : ""}
         ${r.startMonth   ? `<span>📅 최초청구: ${r.startMonth}</span>` : ""}
         ${r.contractDate ? `<span>🗓 계약일: ${r.contractDate}</span>` : ""}
       </div>
-      ${churnItems ? `<div style="margin-top:8px">${churnItems}</div>` : ""}
+      ${(() => {
+        if (c.type !== "churn") return "";
+        // 이탈사유: 신규 필드 우선, 없으면 구 필드
+        const hasNew = r.churnReason || r.churnCategory;
+        if (hasNew) {
+          return `<div style="margin-top:4px;font-size:12px;">
+            ${r.churnCategory ? `<span style="background:#FAECE7;color:var(--danger);padding:2px 8px;border-radius:20px;font-weight:600;margin-right:6px">${r.churnCategory}</span>` : ""}
+            ${r.churnReason   ? `<span style="color:var(--danger);">${r.churnReason}</span>` : ""}
+          </div>`;
+        } else if (r.churnReasonLegacy) {
+          return `<div style="margin-top:4px;font-size:12px;color:var(--danger);">${r.churnReasonLegacy}</div>`;
+        }
+        return "";
+      })()}
+      ${churnItems ? `<div style="margin-top:6px">${churnItems}</div>` : ""}
     </div>`;
   });
 
