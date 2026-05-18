@@ -1035,6 +1035,11 @@ const SEARCH_COORDS = {
   "횡성군":[37.4912,127.9853]
 } // 표시 이름 변경
 
+// ── 이름 표시 설정 ────────────────────────────────────────
+const ACCOUNTANTS   = ["이범기", "정준"];
+const NO_TITLE      = ["선영회계법인"];
+const DISPLAY_NAMES = { "선영회계법인": "선영회계법인 본점" };
+
 function formatName(t) {
   const displayName = DISPLAY_NAMES[t.name] || t.name;
   if (NO_TITLE.includes(t.name))       return displayName;           // 직함 없음
@@ -1351,9 +1356,8 @@ function renderDailyTab() {
     return;
   }
 
-  // 해당 날짜의 계약 집계
-  // CONTRACT_DATES = { 지점명: [{date, bizType},...] }
-  const dayContracts = {}; // { 지점명: {individual:N, corporate:N, total:N} }
+  // 해당 날짜 계약 집계
+  const dayContracts = {};
   let totalInd = 0, totalCorp = 0;
 
   Object.entries(CONTRACT_DATES).forEach(([branch, records]) => {
@@ -1367,25 +1371,18 @@ function renderDailyTab() {
   });
 
   const totalAll = totalInd + totalCorp;
-  const taxCount = Object.keys(dayContracts).length;
-
-  // ── 요약 카드 ──
-  function sCard(label, val, color, sub) {
-    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;">
-      <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:8px">${label}</div>
-      <div style="font-size:22px;font-weight:700;color:var(--text)">${val}<span style="font-size:13px;font-weight:400;color:var(--text-sub)">건</span></div>
-      ${sub ? `<div style="font-size:11px;color:var(--text-sub);margin-top:4px">${sub}</div>` : ""}
-    </div>`;
-  }
-
   const dateLabel = date === getToday() ? `오늘 (${date})` : date;
-  summaryEl.innerHTML =
-    sCard(`📅 ${dateLabel} 전체`, totalAll, "var(--primary)",
-          `개인 ${totalInd}건 / 법인 ${totalCorp}건`) +
-    sCard("👤 배정 세무사 수", taxCount, "#185FA5",
-          taxCount ? `1인 평균 ${(totalAll/taxCount).toFixed(1)}건` : "") +
-    sCard("⚠️ 5건 이상", Object.values(dayContracts).filter(v=>v.total>=5).length, "#854F0B",
-          "당일 5건 이상 배정된 세무사");
+
+  // ── 요약 카드 (전체 건수만) ──
+  summaryEl.innerHTML = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;grid-column:1/-1;">
+      <div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:6px">📅 ${dateLabel} 배정 현황</div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:14px;">
+        <span>전체 <strong style="font-size:18px;color:var(--text)">${totalAll}</strong>건</span>
+        <span style="color:var(--text-sub)">개인사업자 <strong style="color:var(--text)">${totalInd}</strong>건</span>
+        <span style="color:var(--text-sub)">법인사업자 <strong style="color:var(--text)">${totalCorp}</strong>건</span>
+      </div>
+    </div>`;
 
   if (!totalAll) {
     gridEl.innerHTML = `<div class="empty-state">${dateLabel}에 배정된 계약이 없습니다.</div>`;
@@ -1393,44 +1390,44 @@ function renderDailyTab() {
   }
 
   // ── 세무사별 카드 (건수 내림차순) ──
-  const sorted = Object.entries(dayContracts).sort((a,b) => b[1].total - a[1].total);
+  const sorted = Object.entries(dayContracts).sort((a, b) => b[1].total - a[1].total);
+  const maxTotal = sorted[0][1].total;
 
-  let html = "";
+  let html = '<div class="dashboard-grid">';
   sorted.forEach(([branch, cnt]) => {
-    // TAX_DATA에서 세무사 정보 가져오기
     const taxer = TAX_DATA.find(t => t.branch === branch || t.name === branch || t.firm === branch);
     const displayName = taxer ? formatName(taxer) : branch;
     const firmName    = taxer ? taxer.firm : "";
+    const warn        = cnt.total >= 5;
 
-    const warn   = cnt.total >= 5;
-    const border = warn ? "border:1.5px solid var(--warn);background:var(--warn-light);"
-                        : cnt.total >= 3 ? "border:1.5px solid #FBC878;"
-                        : "border:1px solid var(--border);";
+    const indFull  = false;
+    const corpFull = false;
+    const cardBorder = warn
+      ? "border:1.5px solid var(--warn);background:var(--warn-light);"
+      : "border:1px solid var(--border);";
 
-    const barWidth = Math.min(100, Math.round(cnt.total / Math.max(...sorted.map(([,v])=>v.total)) * 100));
+    const barWidth = Math.round(cnt.total / maxTotal * 100);
 
-    html += `<div style="${border}background:${warn?"var(--warn-light)":"var(--card)"};border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+    html += `<div style="${cardBorder}background:${warn ? "var(--warn-light)" : "var(--card)"};border-radius:var(--radius);padding:14px 16px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
         <div>
-          <span style="font-size:15px;font-weight:700;color:var(--text)">${displayName}</span>
-          ${firmName ? `<span style="font-size:12px;color:var(--text-sub);margin-left:6px">${firmName}</span>` : ""}
-          ${warn ? `<span class="tag" style="background:#FDE8CC;color:#854F0B;font-size:11px;margin-left:6px">⚠️ 과다</span>` : ""}
+          <div style="font-size:14px;font-weight:700;color:var(--text)">${displayName}
+            ${warn ? `<span class="tag" style="background:#FDE8CC;color:#854F0B;font-size:11px;margin-left:6px">⚠️ 5건 이상</span>` : ""}
+          </div>
+          ${firmName ? `<div style="font-size:11px;color:var(--text-sub);margin-top:2px">${firmName}</div>` : ""}
         </div>
-        <span style="font-size:20px;font-weight:700;color:${warn?"var(--warn)":"var(--primary)"}">
-          ${cnt.total}<span style="font-size:12px;font-weight:400;color:var(--text-sub)">건</span>
-        </span>
+        <strong style="font-size:20px;color:${warn ? "var(--warn)" : "var(--primary)"};">${cnt.total}<span style="font-size:11px;font-weight:400;color:var(--text-sub)">건</span></strong>
       </div>
-      <!-- 건수 바 -->
-      <div style="height:6px;background:var(--border);border-radius:3px;margin-bottom:8px;">
-        <div style="height:6px;border-radius:3px;width:${barWidth}%;background:${warn?"var(--warn)":"var(--primary)"};transition:width 0.3s;"></div>
+      <div style="height:5px;background:var(--border);border-radius:3px;margin-bottom:8px;">
+        <div style="height:5px;border-radius:3px;width:${barWidth}%;background:${warn ? "var(--warn)" : "var(--primary)"};"></div>
       </div>
-      <div style="display:flex;gap:12px;font-size:12px;color:var(--text-sub);">
+      <div style="display:flex;gap:10px;font-size:12px;color:var(--text-sub);">
         <span>👤 개인사업자 <strong style="color:var(--text)">${cnt.individual}건</strong></span>
         <span>🏢 법인사업자 <strong style="color:var(--text)">${cnt.corporate}건</strong></span>
       </div>
     </div>`;
   });
-
+  html += '</div>';
   gridEl.innerHTML = html;
 }
 
