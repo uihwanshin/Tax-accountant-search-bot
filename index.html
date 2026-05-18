@@ -1875,35 +1875,50 @@ const LOCK_KEY  = "semusa_auth_v1";
 const LOCK_HASH = "96e769f0354c28525960af56798aacff08ceeba7f70c9e4f5bfdbbd8da7d9fbd";
 
 async function checkPassword() {
-  const val = $("lockInput").value;
-  const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(val));
-  const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2,"0")).join("");
-  if (hashHex === LOCK_HASH) {
-    sessionStorage.setItem(LOCK_KEY, "1");
-    $("lockScreen").style.display = "none";
-    $("mainContent").style.display = "block";
-    loadData();
-    initTokenUI();
-    scheduleAutoRefresh();
-  } else {
-    $("lockError").style.display = "block";
-    $("lockInput").value = "";
-    $("lockInput").focus();
+  try {
+    const input = document.getElementById("lockInput");
+    const errEl = document.getElementById("lockError");
+    const val   = input ? input.value : "";
+    if (!val) return;
+
+    const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(val));
+    const hashHex = Array.from(new Uint8Array(hashBuffer))
+                      .map(b => b.toString(16).padStart(2,"0")).join("");
+
+    if (hashHex === LOCK_HASH) {
+      sessionStorage.setItem(LOCK_KEY, "1");
+      document.getElementById("lockScreen").style.display = "none";
+      document.getElementById("mainContent").style.display = "block";
+      loadData();
+      initTokenUI();
+      scheduleAutoRefresh();
+    } else {
+      if (errEl) errEl.style.display = "block";
+      if (input) { input.value = ""; input.focus(); }
+    }
+  } catch(e) {
+    console.error("checkPassword 오류:", e);
+    // crypto.subtle 미지원 환경 fallback (HTTP 환경 등)
+    const input = document.getElementById("lockInput");
+    const errEl = document.getElementById("lockError");
+    if (errEl) { errEl.textContent = "⚠️ 보안 오류: HTTPS 환경에서만 접속 가능합니다."; errEl.style.display = "block"; }
+    if (input) input.value = "";
   }
 }
 
 // 페이지 로드 시 인증 확인 (버그 #2 수정: 이미 인증된 경우도 loadData 호출)
 (function() {
+  const lockEl = document.getElementById("lockScreen");
+  const mainEl = document.getElementById("mainContent");
   if (sessionStorage.getItem(LOCK_KEY) === "1") {
-    $("lockScreen").style.display = "none";
-    $("mainContent").style.display = "block";
-    // 이미 인증된 상태에서도 데이터 로드 + 자동 갱신 시작
+    if (lockEl) lockEl.style.display = "none";
+    if (mainEl) mainEl.style.display = "block";
     loadData();
     initTokenUI();
     scheduleAutoRefresh();
   } else {
-    $("lockScreen").style.display = "flex";
-    $("mainContent").style.display = "none";
+    if (lockEl) lockEl.style.display = "flex";
+    if (mainEl) mainEl.style.display = "none";
   }
 })();
 </script>
