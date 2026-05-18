@@ -791,7 +791,7 @@ function updateStatusBar() {
   setStatus(`✅ <strong>${count}명</strong> &nbsp;·&nbsp; 세무사정보: <strong>${d}</strong> (${src}) &nbsp;·&nbsp; ${atStatus}`);
 }
 
-function // showStatus → updateStatusBar 직접 사용
+// showStatus → updateStatusBar 직접 사용
 function setStatus(html) { $("statusText").innerHTML = html; }
 function pad(n) { return String(n).padStart(2,"0"); }
 
