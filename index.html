@@ -268,6 +268,7 @@
   <div class="tab-bar">
     <button class="tab-btn active" onclick="switchTab('search', this)">🔍 세무사 검색</button>
     <button class="tab-btn" onclick="switchTab('dashboard', this)">📊 배정 현황</button>
+    <button class="tab-btn" onclick="switchTab('daily', this)">📅 일별 배정 현황</button>
   </div>
 
   <!-- 탭: 세무사 검색 -->
@@ -406,6 +407,37 @@
     </div>
   </div><!-- /tab-dashboard -->
 
+  <!-- 탭: 일별 배정 현황 -->
+  <div class="tab-content" id="tab-daily">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--text)">일별 배정 현황</div>
+        <div style="font-size:12px;color:var(--text-sub);margin-top:2px">계약서공유일 기준 · 세무사별 일일 배정 건수</div>
+      </div>
+      <button class="admin-toggle" id="dailyRefreshBtn" onclick="loadDailyData()" style="font-size:12px">🔄 새로고침</button>
+    </div>
+
+    <!-- 날짜 선택 -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;">
+        <span style="font-size:13px;color:var(--text-sub);font-weight:500;">📅 날짜 선택</span>
+        <input type="date" id="dailyDatePicker"
+          style="font-family:'Noto Sans KR',sans-serif;font-size:13px;border:none;background:transparent;color:var(--text);outline:none;cursor:pointer;"
+          onchange="renderDailyTab()"
+        />
+      </div>
+      <button class="dash-filter-btn active" id="dailyTodayBtn" onclick="setDailyToday()">오늘</button>
+      <button class="dash-filter-btn" onclick="shiftDailyDate(-1)">◀ 전날</button>
+      <button class="dash-filter-btn" onclick="shiftDailyDate(1)">다음날 ▶</button>
+    </div>
+
+    <!-- 요약 카드 -->
+    <div id="dailySummary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;"></div>
+
+    <!-- 세무사별 배정 목록 -->
+    <div id="dailyGrid"></div>
+  </div><!-- /tab-daily -->
+
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -422,9 +454,10 @@ Object.defineProperty(window, 'LS_KEY', { get: () => LS_KEY_PREFIX  + getToday()
 Object.defineProperty(window, 'LS_META',{ get: () => LS_META_PREFIX + getToday() });
 const LS_CONTRACT  = "semusa_contract_v1"; // Airtable는 실시간이라 날짜 무관
 const WORKER_URL   = "https://savetax-airtable-proxy.suh-204.workers.dev/airtable";
-let TAX_DATA       = [];
-let CONTRACT_MAP   = {}; // { "지점명": { individual: N, corporate: N } }
-let adminOpen      = false;
+let TAX_DATA        = [];
+let CONTRACT_MAP    = {}; // { "지점명": { individual: N, corporate: N } }
+let CONTRACT_DATES  = {}; // { "지점명": [{date:"YYYY-MM-DD", bizType:"개인"|"법인"},...] }
+let adminOpen       = false;
 
 // ── 시/도별 시군구 ────────────────────────────────────────
 const REGIONS_LIST = [
@@ -442,12 +475,12 @@ const DISTRICTS = {
   "대전":["대덕구","동구","서구","유성구","중구"],
   "광주":["광산구","남구","동구","북구","서구"],
   "세종":["세종시"],
-  "강원":["강릉시","고성군","동해시","삼척시","속초시","양구군","양양군","영월군","원주시","인제군","정선군","철원군","춘천시","태백시","평창군","홍천군","화천군","횡성군"],
+  "강원":["강릉시","강원고성군","동해시","삼척시","속초시","양구군","양양군","영월군","원주시","인제군","정선군","철원군","춘천시","태백시","평창군","홍천군","화천군","횡성군"],
   "충청남도":["공주시","금산군","논산시","당진시","보령시","부여군","서산시","서천군","아산시","예산군","청양군","천안시","태안군","홍성군","계룡시"],
   "충청북도":["보은군","옥천군","영동군","증평군","진천군","괴산군","음성군","청주시","충주시","제천시","단양군"],
   "전라남도":["고흥군","곡성군","광양시","구례군","나주시","담양군","무안군","보성군","순천시","신안군","여수시","영광군","영암군","완도군","장성군","장흥군","진도군","함평군","해남군","화순군"],
   "전라북도":["고창군","군산시","김제시","남원시","무주군","부안군","순창군","완주군","익산시","임실군","장수군","전주시","정읍시","진안군"],
-  "경상남도":["거제시","거창군","고성군","김해시","남해군","밀양시","사천시","산청군","양산시","의령군","진주시","창녕군","창원시","통영시","하동군","함안군","함양군","합천군"],
+  "경상남도":["거제시","거창군","경상남도고성군","김해시","남해군","밀양시","사천시","산청군","양산시","의령군","진주시","창녕군","창원시","통영시","하동군","함안군","함양군","합천군"],
   "경상북도":["경산시","경주시","고령군","구미시","김천시","문경시","봉화군","상주시","성주군","안동시","영덕군","영양군","영주시","영천시","예천군","울릉군","울진군","의성군","청도군","청송군","칠곡군","포항시"],
   "제주":["서귀포시","제주시"],
 }
@@ -704,15 +737,22 @@ async function loadAirtable() {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
-    CONTRACT_MAP = data.map || {};
-    localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, updatedAt: data.updatedAt || new Date().toISOString() }));
+    CONTRACT_MAP   = data.map   || {};
+    CONTRACT_DATES = data.dates || {};
+    buildContractIndex();
+    localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, dates: CONTRACT_DATES, updatedAt: data.updatedAt || new Date().toISOString() }));
     updateStatusBar();
     if (document.getElementById("tab-dashboard")?.classList.contains("active")) renderDashboard();
 
   } catch(e) {
     // 실패 시 캐시 사용
     const cached = localStorage.getItem(LS_CONTRACT);
-    if (cached) CONTRACT_MAP = JSON.parse(cached).map || {};
+    if (cached) {
+      const p = JSON.parse(cached);
+      CONTRACT_MAP   = p.map   || {};
+      CONTRACT_DATES = p.dates || {};
+      buildContractIndex();
+    }
     updateStatusBar();
   }
 }
@@ -820,163 +860,161 @@ const SEARCH_COORDS = {
   "경상남도":[35.4606,128.2132],
   "경상북도":[36.4919,128.8889],
   "제주":[33.489,126.4983],
-  "가평군":[37.8314,127.51],
+  "가평군":[37.8314,127.5096],
   "강릉시":[37.7519,128.8761],
-  "경주시":[35.8562,129.2247],
-  "고양시":[37.6584,126.832],
-  "과천시":[37.4292,126.9877],
-  "광명시":[37.4789,126.8647],
-  "광주시":[37.4295,127.2559],
+  "강원고성군":[38.3805,128.4687],
+  "강진군":[34.6421,126.7673],
+  "거제시":[34.8919,128.6211],
+  "거창군":[35.6867,127.9095],
+  "경산시":[35.8251,128.7348],
+  "경상남도고성군":[34.9765,128.3235],
+  "경주시":[35.8562,129.2128],
+  "계룡시":[36.2745,127.2483],
+  "고령군":[35.7247,128.2625],
+  "고양시":[37.6582,126.832],
+  "고창군":[35.4358,126.7021],
+  "고흥군":[34.6036,127.2842],
+  "곡성군":[35.282,127.292],
+  "공주시":[36.4465,127.119],
+  "과천시":[37.4293,126.9877],
+  "광명시":[37.4785,126.8646],
+  "광양시":[34.9407,127.6961],
+  "광주시":[37.4294,127.2551],
+  "괴산군":[36.8153,127.7925],
+  "구례군":[35.2025,127.4628],
   "구리시":[37.5943,127.1296],
-  "구미시":[36.1195,128.3446],
-  "군산시":[35.9676,126.7368],
-  "군포시":[37.3614,126.9352],
-  "김포시":[37.615,126.716],
-  "김해시":[35.2281,128.8892],
-  "남양주시":[37.6359,127.2165],
+  "구미시":[36.1195,128.3443],
+  "군산시":[35.9676,126.7366],
+  "군포시":[37.3617,126.9353],
+  "금산군":[36.1089,127.4874],
+  "김제시":[35.8036,126.8808],
+  "김천시":[36.1394,128.1136],
+  "김포시":[37.6152,126.7156],
+  "김해시":[35.2332,128.8819],
+  "나주시":[35.0158,126.7107],
+  "남양주시":[37.636,127.2165],
+  "남원시":[35.4164,127.3905],
+  "남해군":[34.8377,127.8925],
+  "논산시":[36.1872,127.0986],
+  "단양군":[36.9846,128.3653],
+  "담양군":[35.3211,126.9882],
+  "당진시":[36.8897,126.6283],
+  "동두천시":[37.9036,127.0607],
+  "동해시":[37.5247,129.1143],
   "목포시":[34.8118,126.3922],
-  "부천시":[37.5034,126.766],
-  "성남시":[37.4449,127.1388],
+  "무안군":[34.9904,126.4792],
+  "무주군":[36.0068,127.6607],
+  "문경시":[36.5862,128.1868],
+  "밀양시":[35.5038,128.7466],
+  "보령시":[36.3333,126.6128],
+  "보성군":[34.7715,127.0798],
+  "보은군":[36.4895,127.7323],
+  "봉화군":[36.893,128.7326],
+  "부안군":[35.7316,126.7334],
+  "부여군":[36.2758,126.9084],
+  "부천시":[37.5034,126.7651],
+  "사천시":[35.0038,128.0642],
+  "산청군":[35.4155,127.8735],
+  "삼척시":[37.4499,129.165],
+  "상주시":[36.411,128.1593],
+  "서귀포시":[33.2541,126.5601],
+  "서산시":[36.7845,126.4504],
+  "서천군":[36.0803,126.6912],
+  "성남시":[37.4201,127.1265],
+  "성주군":[35.9194,128.2858],
+  "세종특별자치시":[36.4801,127.2892],
+  "속초시":[38.207,128.5915],
   "수원시":[37.2636,127.0286],
-  "순천시":[34.9506,127.4877],
-  "시흥시":[37.3799,126.803],
-  "아산시":[36.7899,127.002],
-  "안산시":[37.3219,126.8309],
+  "순창군":[35.3743,127.1373],
+  "순천시":[34.9506,127.4872],
+  "시흥시":[37.3801,126.8029],
+  "신안군":[34.8263,126.3516],
+  "아산시":[36.7898,127.0019],
+  "안동시":[36.5684,128.7296],
+  "안산시":[37.3219,126.8308],
+  "안성시":[37.008,127.2798],
   "안양시":[37.3943,126.9568],
-  "양주시":[37.7855,127.046],
-  "양평군":[37.4916,127.4877],
+  "양구군":[38.1095,127.9898],
+  "양산시":[35.3351,129.0375],
+  "양양군":[38.0754,128.6189],
+  "양주시":[37.7853,127.0458],
+  "양평군":[37.4917,127.4875],
   "여수시":[34.7604,127.6622],
-  "여주시":[37.2982,127.6374],
-  "연천군":[38.0967,127.0748],
-  "오산시":[37.1498,127.077],
+  "여주시":[37.2984,127.6371],
+  "연천군":[38.0965,127.0754],
+  "영광군":[35.2773,126.512],
+  "영덕군":[36.415,129.3653],
+  "영동군":[36.1751,127.7835],
+  "영암군":[34.8001,126.6968],
+  "영양군":[36.6663,129.1122],
+  "영월군":[37.1838,128.4673],
+  "영주시":[36.8262,128.6236],
+  "영천시":[35.9733,128.9385],
+  "예산군":[36.6811,126.8433],
+  "예천군":[36.6569,128.4528],
+  "오산시":[37.1498,127.0775],
+  "옥천군":[36.3034,127.5683],
+  "완도군":[34.311,126.755],
+  "완주군":[35.9048,127.162],
   "용인시":[37.2411,127.1776],
+  "울릉군":[37.4845,130.9054],
+  "울진군":[36.993,129.4007],
   "원주시":[37.3422,127.9202],
-  "의왕시":[37.3449,126.9688],
-  "의정부시":[37.7382,127.0438],
-  "이천시":[37.2724,127.4349],
-  "익산시":[35.9483,126.9578],
+  "음성군":[36.9402,127.6905],
+  "의령군":[35.3222,128.2618],
+  "의성군":[36.3528,128.697],
+  "의왕시":[37.3448,126.9682],
+  "의정부시":[37.7381,127.0337],
+  "이천시":[37.2723,127.4431],
+  "익산시":[35.9483,126.9577],
+  "인제군":[38.0697,128.1703],
+  "임실군":[35.6178,127.2891],
+  "장성군":[35.3018,126.7848],
+  "장수군":[35.6472,127.5214],
+  "장흥군":[34.6815,126.907],
   "전주시":[35.8242,127.148],
-  "진주시":[35.18,128.1076],
-  "창원시":[35.228,128.6811],
-  "천안시":[36.8065,127.1523],
+  "정선군":[37.3807,128.6608],
+  "정읍시":[35.5698,126.8573],
+  "제주시":[33.489,126.4983],
+  "제천시":[37.1326,128.2141],
+  "증평군":[36.7879,127.5866],
+  "진도군":[34.4868,126.2634],
+  "진안군":[35.7915,127.4249],
+  "진주시":[35.1798,128.1076],
+  "진천군":[36.8553,127.4357],
+  "창녕군":[35.5446,128.4922],
+  "창원시":[35.2277,128.6811],
+  "천안시":[36.8151,127.1139],
+  "철원군":[38.1461,127.3134],
+  "청도군":[35.6473,128.7343],
+  "청송군":[36.4358,129.0573],
+  "청양군":[36.459,126.8028],
   "청주시":[36.6424,127.489],
-  "춘천시":[37.8813,127.73],
-  "파주시":[37.7601,126.7799],
-  "평택시":[36.9921,127.1127],
-  "포천시":[37.8946,127.2003],
+  "춘천시":[37.8813,127.7298],
+  "충주시":[36.991,127.9259],
+  "칠곡군":[35.9956,128.4019],
+  "태백시":[37.1641,128.9856],
+  "태안군":[36.7457,126.2979],
+  "통영시":[34.8544,128.4332],
+  "파주시":[37.76,126.7799],
+  "평창군":[37.3705,128.3902],
+  "평택시":[36.9922,127.1127],
+  "포천시":[37.8949,127.2003],
   "포항시":[36.019,129.3435],
-  "하남시":[37.5392,127.2148],
-  "화성시":[37.1996,126.8312]
-}
-const DISTRICT_COORDS = {
-  "서울강남구":[37.4959,127.0664],
-  "서울강동구":[37.5301,127.1237],
-  "서울강북구":[37.6396,127.0255],
-  "서울강서구":[37.5509,126.8494],
-  "서울관악구":[37.4784,126.9515],
-  "서울광진구":[37.5385,127.0824],
-  "서울구로구":[37.4954,126.8875],
-  "서울금천구":[37.4568,126.8954],
-  "서울노원구":[37.6542,127.0568],
-  "서울도봉구":[37.6688,127.0471],
-  "서울동대문구":[37.5744,127.04],
-  "서울동작구":[37.5124,126.9395],
-  "서울마포구":[37.5662,126.9016],
-  "서울서대문구":[37.5791,126.9368],
-  "서울서초구":[37.4837,127.0324],
-  "서울성동구":[37.5633,127.0371],
-  "서울성북구":[37.5891,127.0182],
-  "서울송파구":[37.5145,127.1058],
-  "서울양천구":[37.5169,126.8665],
-  "서울영등포구":[37.5263,126.8962],
-  "서울용산구":[37.5326,126.9904],
-  "서울은평구":[37.6027,126.9291],
-  "서울종로구":[37.573,126.9794],
-  "서울중구":[37.5636,126.9975],
-  "서울중랑구":[37.6063,127.0931],
-  "인천강화군":[37.746,126.488],
-  "인천계양구":[37.5375,126.7377],
-  "인천남동구":[37.4475,126.7317],
-  "인천동구":[37.4811,126.6436],
-  "인천미추홀구":[37.4636,126.6506],
-  "인천부평구":[37.5071,126.7224],
-  "인천서구":[37.5451,126.6751],
-  "인천연수구":[37.4101,126.6781],
-  "인천옹진군":[37.4465,126.6508],
-  "인천중구":[37.4734,126.6326],
-  "부산강서구":[35.2122,128.9805],
-  "부산금정구":[35.2429,129.0924],
-  "부산기장군":[35.2446,129.2122],
-  "부산남구":[35.1365,129.0843],
-  "부산동구":[35.1293,129.0454],
-  "부산동래구":[35.2048,129.0838],
-  "부산부산진구":[35.1623,129.0531],
-  "부산북구":[35.1972,128.9904],
-  "부산사상구":[35.1526,128.9904],
-  "부산사하구":[35.1044,128.9748],
-  "부산서구":[35.0979,129.0243],
-  "부산수영구":[35.1456,129.1131],
-  "부산연제구":[35.1762,129.0795],
-  "부산영도구":[35.0912,129.0677],
-  "부산중구":[35.1062,129.0324],
-  "부산해운대구":[35.1631,129.1636],
-  "대구군위군":[36.2428,128.5727],
-  "대구남구":[35.846,128.5911],
-  "대구달서구":[35.8298,128.5326],
-  "대구달성군":[35.7745,128.4312],
-  "대구동구":[35.8864,128.6355],
-  "대구북구":[35.892,128.5833],
-  "대구서구":[35.8718,128.5591],
-  "대구수성구":[35.8582,128.6305],
-  "대구중구":[35.8694,128.6062],
-  "울산남구":[35.5445,129.3303],
-  "울산동구":[35.5052,129.4172],
-  "울산북구":[35.5824,129.3614],
-  "울산울주군":[35.5398,129.243],
-  "울산중구":[35.5695,129.3323],
-  "대전대덕구":[36.346705,127.415562],
-  "대전동구":[36.334,127.4395],
-  "대전서구":[36.3553,127.3837],
-  "대전유성구":[36.3622,127.3352],
-  "대전중구":[36.3251,127.4215],
-  "광주광산구":[35.1396,126.7937],
-  "광주남구":[35.1329,126.9023],
-  "광주동구":[35.1461,126.9231],
-  "광주북구":[35.1741,126.9121],
-  "광주서구":[35.1521,126.8485]
-};
-
-function coordFromAddress(addr) {
-  if (!addr) return null;
-  // 1순위: 광역시+구명 조합 키 매칭
-  // 예) "서울시 강남구" → "서울" 포함 && "강남구" 포함 → "서울강남구" 키로 조회
-  for (const [k,v] of Object.entries(DISTRICT_COORDS)) {
-    // 조합 키(서울강남구, 부산강서구 등): 앞 2글자(지역)와 나머지(구명) 분리해서 매칭
-    const regionPart = k.slice(0,2);   // "서울", "부산", "인천" 등
-    const guPart     = k.slice(2);     // "강남구", "강서구" 등
-    if (addr.includes(regionPart) && addr.includes(guPart)) return v;
-  }
-  // 2순위: 시군구 단위 (광역 제외)
-  for (const [k,v] of Object.entries(SEARCH_COORDS)) {
-    if (!METRO_SET.has(k) && addr.includes(k)) return v;
-  }
-  // 3순위: 광역시도 단위
-  for (const [k,v] of Object.entries(SEARCH_COORDS)) {
-    if (METRO_SET.has(k) && addr.includes(k)) return v;
-  }
-  return null;
-}
-function haversine(lat1,lon1,lat2,lon2) {
-  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
-  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-}
-
-// ── 검색 ────────────────────────────────────────────────
-// ── 이름 + 직함 포맷 ─────────────────────────────────────
-const ACCOUNTANTS   = ["이범기", "정준"];       // 회계사
-const NO_TITLE      = ["선영회계법인"];          // 직함 없음
-const DISPLAY_NAMES = { "선영회계법인": "선영회계법인 본점" }; // 표시 이름 변경
+  "하남시":[37.5393,127.2148],
+  "하동군":[35.0673,127.7513],
+  "함안군":[35.2725,128.4065],
+  "함양군":[35.5204,127.7251],
+  "함평군":[35.0657,126.5165],
+  "합천군":[35.5667,128.1658],
+  "해남군":[34.5735,126.5991],
+  "홍성군":[36.6013,126.6608],
+  "홍천군":[37.6974,127.8887],
+  "화성시":[37.1995,126.8315],
+  "화순군":[35.0645,126.9865],
+  "화천군":[38.1058,127.7081],
+  "횡성군":[37.4912,127.9853]
+} // 표시 이름 변경
 
 function formatName(t) {
   const displayName = DISPLAY_NAMES[t.name] || t.name;
@@ -1253,6 +1291,130 @@ function renderResults(list, q) {
 document.getElementById("searchInput").addEventListener("keydown", e=>{ if(e.key==="Enter") doSearch(); });
 // loadData와 scheduleAutoRefresh는 잠금 해제 후 호출됨
 
+
+// ── 일별 배정 현황 ───────────────────────────────────────
+function setDailyToday() {
+  const today = getToday();
+  $("dailyDatePicker").value = today;
+  $("dailyTodayBtn").classList.add("active");
+  renderDailyTab();
+}
+
+function shiftDailyDate(delta) {
+  const picker = $("dailyDatePicker");
+  if (!picker.value) { setDailyToday(); return; }
+  const d = new Date(picker.value);
+  d.setDate(d.getDate() + delta);
+  picker.value = d.toISOString().slice(0,10);
+  $("dailyTodayBtn").classList.toggle("active", picker.value === getToday());
+  renderDailyTab();
+}
+
+async function loadDailyData() {
+  const btn = $("dailyRefreshBtn");
+  if (btn) { btn.textContent = "⏳ 불러오는 중..."; btn.disabled = true; }
+  await loadAirtable();
+  renderDailyTab();
+  if (btn) { btn.textContent = "✅ 완료"; btn.disabled = false; }
+  setTimeout(() => { if (btn) btn.textContent = "🔄 새로고침"; }, 2000);
+}
+
+function renderDailyTab() {
+  const date = $("dailyDatePicker")?.value;
+  if (!date) { setDailyToday(); return; }
+
+  const summaryEl = $("dailySummary");
+  const gridEl    = $("dailyGrid");
+
+  if (!Object.keys(CONTRACT_DATES).length) {
+    gridEl.innerHTML = `<div class="empty-state">계약 현황 데이터가 없습니다. 🔄 새로고침을 눌러주세요.</div>`;
+    summaryEl.innerHTML = "";
+    return;
+  }
+
+  // 해당 날짜의 계약 집계
+  // CONTRACT_DATES = { 지점명: [{date, bizType},...] }
+  const dayContracts = {}; // { 지점명: {individual:N, corporate:N, total:N} }
+  let totalInd = 0, totalCorp = 0;
+
+  Object.entries(CONTRACT_DATES).forEach(([branch, records]) => {
+    const dayRecs = records.filter(r => r.date === date);
+    if (!dayRecs.length) return;
+    const ind  = dayRecs.filter(r => r.bizType === "개인사업자").length;
+    const corp = dayRecs.filter(r => r.bizType === "법인사업자").length;
+    dayContracts[branch] = { individual: ind, corporate: corp, total: ind + corp };
+    totalInd  += ind;
+    totalCorp += corp;
+  });
+
+  const totalAll = totalInd + totalCorp;
+  const taxCount = Object.keys(dayContracts).length;
+
+  // ── 요약 카드 ──
+  function sCard(label, val, color, sub) {
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;">
+      <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:8px">${label}</div>
+      <div style="font-size:22px;font-weight:700;color:var(--text)">${val}<span style="font-size:13px;font-weight:400;color:var(--text-sub)">건</span></div>
+      ${sub ? `<div style="font-size:11px;color:var(--text-sub);margin-top:4px">${sub}</div>` : ""}
+    </div>`;
+  }
+
+  const dateLabel = date === getToday() ? `오늘 (${date})` : date;
+  summaryEl.innerHTML =
+    sCard(`📅 ${dateLabel} 전체`, totalAll, "var(--primary)",
+          `개인 ${totalInd}건 / 법인 ${totalCorp}건`) +
+    sCard("👤 배정 세무사 수", taxCount, "#185FA5",
+          taxCount ? `1인 평균 ${(totalAll/taxCount).toFixed(1)}건` : "") +
+    sCard("⚠️ 5건 이상", Object.values(dayContracts).filter(v=>v.total>=5).length, "#854F0B",
+          "당일 5건 이상 배정된 세무사");
+
+  if (!totalAll) {
+    gridEl.innerHTML = `<div class="empty-state">${dateLabel}에 배정된 계약이 없습니다.</div>`;
+    return;
+  }
+
+  // ── 세무사별 카드 (건수 내림차순) ──
+  const sorted = Object.entries(dayContracts).sort((a,b) => b[1].total - a[1].total);
+
+  let html = "";
+  sorted.forEach(([branch, cnt]) => {
+    // TAX_DATA에서 세무사 정보 가져오기
+    const taxer = TAX_DATA.find(t => t.branch === branch || t.name === branch || t.firm === branch);
+    const displayName = taxer ? formatName(taxer) : branch;
+    const firmName    = taxer ? taxer.firm : "";
+
+    const warn   = cnt.total >= 5;
+    const border = warn ? "border:1.5px solid var(--warn);background:var(--warn-light);"
+                        : cnt.total >= 3 ? "border:1.5px solid #FBC878;"
+                        : "border:1px solid var(--border);";
+
+    const barWidth = Math.min(100, Math.round(cnt.total / Math.max(...sorted.map(([,v])=>v.total)) * 100));
+
+    html += `<div style="${border}background:${warn?"var(--warn-light)":"var(--card)"};border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div>
+          <span style="font-size:15px;font-weight:700;color:var(--text)">${displayName}</span>
+          ${firmName ? `<span style="font-size:12px;color:var(--text-sub);margin-left:6px">${firmName}</span>` : ""}
+          ${warn ? `<span class="tag" style="background:#FDE8CC;color:#854F0B;font-size:11px;margin-left:6px">⚠️ 과다</span>` : ""}
+        </div>
+        <span style="font-size:20px;font-weight:700;color:${warn?"var(--warn)":"var(--primary)"}">
+          ${cnt.total}<span style="font-size:12px;font-weight:400;color:var(--text-sub)">건</span>
+        </span>
+      </div>
+      <!-- 건수 바 -->
+      <div style="height:6px;background:var(--border);border-radius:3px;margin-bottom:8px;">
+        <div style="height:6px;border-radius:3px;width:${barWidth}%;background:${warn?"var(--warn)":"var(--primary)"};transition:width 0.3s;"></div>
+      </div>
+      <div style="display:flex;gap:12px;font-size:12px;color:var(--text-sub);">
+        <span>👤 개인사업자 <strong style="color:var(--text)">${cnt.individual}건</strong></span>
+        <span>🏢 법인사업자 <strong style="color:var(--text)">${cnt.corporate}건</strong></span>
+      </div>
+    </div>`;
+  });
+
+  gridEl.innerHTML = html;
+}
+
 // ── 자동 갱신 (업무시간 9~19시, 30분 간격) ───────────────
 function scheduleAutoRefresh() {
   setInterval(() => {
@@ -1276,6 +1438,10 @@ function switchTab(name, btn) {
   document.getElementById("tab-" + name).classList.add("active");
   btn.classList.add("active");
   if (name === "dashboard") renderDashboard();
+  if (name === "daily") {
+    if (!$("dailyDatePicker").value) setDailyToday();
+    else renderDailyTab();
+  }
 }
 
 // ── 대시보드 필터 상태 ───────────────────────────────────
