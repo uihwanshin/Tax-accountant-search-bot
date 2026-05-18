@@ -277,8 +277,8 @@
   <!-- 관리자 패널 -->
   <div class="admin-panel" id="adminPanel">
     <h3>📂 데이터 업데이트</h3>
-    <p>새 엑셀 파일을 업로드하면 모든 사용자에게 즉시 반영됩니다.<br>
-    Google Sheets에서 <strong>파일 → 공유 → 웹에 게시 → CSV</strong>로 내보내거나 .xlsx 파일을 직접 업로드하세요.</p>
+    <p>엑셀 파일을 업로드하면 임시로 데이터를 덮어쓸 수 있습니다.<br>
+    평소에는 <strong>Airtable에서 자동 연동</strong>됩니다. 🔄 새로고침으로 최신 데이터를 불러오세요.</p>
     <div class="dropzone" id="dropzone"
       onclick="document.getElementById('fileInput').click()"
       ondragover="event.preventDefault();this.classList.add('drag')"
@@ -473,6 +473,7 @@ Object.defineProperty(window, 'LS_KEY', { get: () => LS_KEY_PREFIX  + getToday()
 Object.defineProperty(window, 'LS_META',{ get: () => LS_META_PREFIX + getToday() });
 const LS_CONTRACT  = "semusa_contract_v1"; // Airtable는 실시간이라 날짜 무관
 const WORKER_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/airtable";
+const TAXDATA_URL     = "https://savetax-airtable-proxy.suh-204.workers.dev/taxdata";
 const REFRESH_BTN_IDS = ["refreshBtn","dashRefreshBtn","dailyRefreshBtn"];
 let TAX_DATA        = [];
 let CONTRACT_MAP    = {}; // { "지점명": { individual: N, corporate: N } }
@@ -712,42 +713,37 @@ async function manualRefresh() {
 
 async function loadData() {
   setStatus('<span class="spinner"></span>데이터 불러오는 중...');
-  // Google Sheets + Airtable 병렬 로드
-  await Promise.all([loadSheets(), loadAirtable()]);
+  // 세무사 정보(Airtable) + 계약 현황(Airtable) 병렬 로드
+  await Promise.all([loadTaxData(), loadAirtable()]);
 }
 
-// ── Google Sheets 로드 ───────────────────────────────────
-async function loadSheets() {
-  let fetchOk = false;
+// ── 세무사 정보 로드 (Airtable /taxdata) ────────────────
+async function loadTaxData() {
   try {
-    const res = await fetch(CSV_URL + "&t=" + Date.now());
+    const res = await fetch(TAXDATA_URL);
     if (!res.ok) throw new Error("HTTP " + res.status);
-    const csv = await res.text();
-    fetchOk = true;
-    const rows = Papa.parse(csv, { header: true, skipEmptyLines: true }).data;
-    const parsed = rows.map(parseRow).filter(t => t.name);
-    TAX_DATA = parsed;
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const parsed = (data.records || []).map(parseRow).filter(t => t.name);
     if (parsed.length > 0) {
-      const meta = { updatedAt: new Date().toISOString(), count: parsed.length, source: "Google Sheets" };
+      TAX_DATA = parsed;
+      const meta = { updatedAt: data.updatedAt || new Date().toISOString(), count: parsed.length, source: "Airtable" };
       localStorage.setItem(LS_KEY, JSON.stringify(parsed));
       localStorage.setItem(LS_META, JSON.stringify(meta));
-      // 이전 날짜 캐시 자동 정리 (버그 #5 수정: TODAY를 함수로 호출)
+      // 이전 날짜 캐시 정리
       const todayStr = getToday();
       Object.keys(localStorage).forEach(k => {
-        if ((k.startsWith(LS_KEY_PREFIX) || k.startsWith(LS_META_PREFIX)) && !k.includes(todayStr)) {
+        if ((k.startsWith(LS_KEY_PREFIX) || k.startsWith(LS_META_PREFIX)) && !k.includes(todayStr))
           localStorage.removeItem(k);
-        }
       });
-      // Sheets 로드 완료 시 즉시 상태바 갱신 (버그 #5 수정)
       updateStatusBar();
-    } else {
-      localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_META);
     }
   } catch(e) {
-    if (!fetchOk) {
-      const cached = localStorage.getItem(LS_KEY);
-      if (cached) TAX_DATA = JSON.parse(cached);
-    }
+    // 실패 시 캐시 사용
+    const cached = localStorage.getItem(LS_KEY);
+    if (cached) TAX_DATA = JSON.parse(cached);
+    updateStatusBar();
   }
 }
 
@@ -846,7 +842,7 @@ function parseRow(r) {
     name:String(r["★이름"]||"").trim(),
     firm:String(r["★상호"]||r["지점명(slack)"]||"").trim(),
     branch:String(r["지점명(slack)"]||"").trim(),
-    address:String(r["사업장 주소"]||r["◆사업장 주소"]||"").trim(),
+    address:String(r["◆사업장 주소"]||r["사업장 주소"]||"").trim(),
     phone:String(r["★연락처"]||"").trim(),
     available,sr,
     individual:r["개인 수임"]!==""&&r["개인 수임"]!==undefined?Number(r["개인 수임"]):null,
