@@ -1575,6 +1575,8 @@ function setDashFilter(val, btn) {
 
 // ── 수임 상태 계산 ───────────────────────────────────────
 function getBookingStatus(t) {
+  // 배정가능여부가 불가능이면 무조건 full
+  if (t.available === "불가능") return "full";
   const { usedInd, usedCorp } = getRemaining(t);
   const maxInd  = t.individual;
   const maxCorp = t.corporate;
