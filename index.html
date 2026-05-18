@@ -222,45 +222,26 @@
     .dashboard-grid{grid-template-columns:1fr 1fr;}
     #dashSummary{grid-template-columns:1fr;}
   }
-
-  /* ── 잠금 화면 ── */
-  .lock-overlay{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;}
-  .lock-box{background:var(--card);border-radius:16px;border:1px solid rgba(0,0,0,0.1);padding:40px 36px;width:100%;max-width:380px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.08);}
-  .lock-icon{font-size:28px;margin-bottom:12px;}
-  .lock-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px;}
-  .lock-desc{font-size:13px;color:var(--text-sub);margin-bottom:24px;}
-  .lock-input{width:100%;padding:12px 14px;font-size:15px;font-family:'Noto Sans KR',sans-serif;border:1.5px solid rgba(0,0,0,0.2);border-radius:8px;outline:none;margin-bottom:10px;text-align:center;letter-spacing:2px;}
-  .lock-error{font-size:12px;color:var(--danger);margin-bottom:10px;display:none;}
-  .lock-btn{width:100%;padding:12px;font-size:15px;font-weight:700;font-family:'Noto Sans KR',sans-serif;background:var(--primary);color:#fff;border:none;border-radius:8px;cursor:pointer;}
-
-  /* ── 섹션 구분선 ── */
-  .section-divider{display:flex;align-items:center;gap:8px;margin:20px 0 10px;}
-  .section-divider-label{font-size:12px;font-weight:700;padding:4px 14px;border-radius:20px;}
-  .section-divider-line{flex:1;height:1px;background:var(--border);}
-
-  /* ── 검색 로딩 ── */
-  .search-loading{padding:2rem;text-align:center;color:var(--text-sub);font-size:14px;}
-
-  /* ── 태그 색상 프리셋 ── */
-  .tag-blue{background:#E6F1FB;color:#185FA5;}
-  .tag-green{background:#E1F5EE;color:#0F6E56;}
-  .tag-purple{background:#EEEDFE;color:#3C3489;}
 </style>
 </head>
 <body>
 
 <!-- 비밀번호 잠금 화면 -->
-<div id="lockScreen" class="lock-overlay" style="display:none;">
-  <div class="lock-box">
-    <div class="lock-icon">🔐</div>
-    <div class="lock-title">세무사 배정 시스템</div>
-    <div class="lock-desc">접속하려면 비밀번호를 입력해주세요.</div>
-    <input id="lockInput" class="lock-input" type="password"
+<div id="lockScreen" style="display:none;position:fixed;inset:0;background:#f8f8f6;z-index:9999;display:flex;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;border:1px solid rgba(0,0,0,0.1);padding:40px 36px;width:100%;max-width:380px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+    <div style="font-size:28px;margin-bottom:12px">🔐</div>
+    <div style="font-size:18px;font-weight:700;color:#1a1a1a;margin-bottom:6px">세무사 배정 시스템</div>
+    <div style="font-size:13px;color:#6b6b6b;margin-bottom:24px">접속하려면 비밀번호를 입력해주세요.</div>
+    <input id="lockInput" type="password"
       placeholder="비밀번호 입력"
+      style="width:100%;padding:12px 14px;font-size:15px;font-family:'Noto Sans KR',sans-serif;border:1.5px solid rgba(0,0,0,0.2);border-radius:8px;outline:none;margin-bottom:10px;text-align:center;letter-spacing:2px;"
       onkeydown="if(event.key==='Enter') checkPassword()"
     />
-    <div id="lockError" class="lock-error">⚠️ 비밀번호가 올바르지 않습니다.</div>
-    <button class="lock-btn" onclick="checkPassword()">입력</button>
+    <div id="lockError" style="font-size:12px;color:#993C1D;margin-bottom:10px;display:none;">⚠️ 비밀번호가 올바르지 않습니다.</div>
+    <button onclick="checkPassword()"
+      style="width:100%;padding:12px;font-size:15px;font-weight:700;font-family:'Noto Sans KR',sans-serif;background:#0F6E56;color:#fff;border:none;border-radius:8px;cursor:pointer;">
+      입력
+    </button>
   </div>
 </div>
 
@@ -430,32 +411,20 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
-// ── 설정 상수 ────────────────────────────────────────────────
-const CSV_URL     = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQxPoON_qWplhsQpChFTxqAOVA-EgqIP5qpJ3jq6Y3pB3-Nj70DLXJ7QUtm8OuDNOZoFha97URx-VK6/pub?gid=0&single=true&output=csv";
-const WORKER_URL  = "https://savetax-airtable-proxy.suh-204.workers.dev/airtable";
-const LS_CONTRACT = "semusa_contract_v1";
-const LS_KEY_PREFIX  = "semusa_data_";
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQxPoON_qWplhsQpChFTxqAOVA-EgqIP5qpJ3jq6Y3pB3-Nj70DLXJ7QUtm8OuDNOZoFha97URx-VK6/pub?gid=0&single=true&output=csv";
+// 날짜 기반 캐시 키 — 함수로 매번 계산해서 자정 넘김 문제 방지 (버그 #6 수정)
+function getToday() { return new Date().toISOString().slice(0,10); }
+const LS_KEY_PREFIX = "semusa_data_";
 const LS_META_PREFIX = "semusa_meta_";
-const REFRESH_BTN_IDS = ["refreshBtn", "dashRefreshBtn"]; // 새로고침 버튼 ID 목록
-
-// ── 날짜 기반 동적 캐시 키 (자정 넘김 대응) ──────────────────
-function getToday() { return new Date().toISOString().slice(0, 10); }
-Object.defineProperty(window, 'TODAY',   { get: () => getToday() });
-Object.defineProperty(window, 'LS_KEY',  { get: () => LS_KEY_PREFIX  + getToday() });
-Object.defineProperty(window, 'LS_META', { get: () => LS_META_PREFIX + getToday() });
-
-// ── 유틸리티 ────────────────────────────────────────────────
-/** getElementById 단축 헬퍼 */
-const $ = id => document.getElementById(id);
-/** 날짜 객체를 "YYYY.MM.DD HH:mm" 형식으로 포맷 */
-const formatDateTime = dt => `${dt.getFullYear()}.${pad(dt.getMonth()+1)}.${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-/** 숫자를 2자리 문자열로 패딩 */
-function pad(n) { return String(n).padStart(2, "0"); }
-
-// ── 전역 상태 ────────────────────────────────────────────────
-let TAX_DATA     = [];
-let CONTRACT_MAP = {};  // { 지점명: { individual: N, corporate: N } }
-let adminOpen    = false;
+// LS_KEY/LS_META는 호출 시점의 날짜 기준으로 동적 생성
+Object.defineProperty(window, 'TODAY',  { get: () => getToday() });
+Object.defineProperty(window, 'LS_KEY', { get: () => LS_KEY_PREFIX  + getToday() });
+Object.defineProperty(window, 'LS_META',{ get: () => LS_META_PREFIX + getToday() });
+const LS_CONTRACT  = "semusa_contract_v1"; // Airtable는 실시간이라 날짜 무관
+const WORKER_URL   = "https://savetax-airtable-proxy.suh-204.workers.dev/airtable";
+let TAX_DATA       = [];
+let CONTRACT_MAP   = {}; // { "지점명": { individual: N, corporate: N } }
+let adminOpen      = false;
 
 // ── 시/도별 시군구 ────────────────────────────────────────
 const REGIONS_LIST = [
@@ -488,11 +457,11 @@ let regionFocusIdx = -1;
 let districtFocusIdx = -1;
 
 function openRegionDrop() {
-  filterRegionOptions($("selRegionInput").value);
+  filterRegionOptions(document.getElementById("selRegionInput").value);
 }
 
 function filterRegionOptions(q) {
-  const drop = $("regionDrop");
+  const drop = document.getElementById("regionDrop");
   const filtered = q ? REGIONS_LIST.filter(r => r.includes(q)) : REGIONS_LIST;
   drop.innerHTML = "";
   // 전체 옵션
@@ -512,14 +481,14 @@ function makeOpt(val, label, type) {
 }
 
 function selectRegionOpt(val, label) {
-  $("selRegion").value = val;
-  $("selRegionInput").value = label === "전체" ? "" : label;
-  $("regionDrop").style.display = "none";
+  document.getElementById("selRegion").value = val;
+  document.getElementById("selRegionInput").value = label === "전체" ? "" : label;
+  document.getElementById("regionDrop").style.display = "none";
   updateDistricts(val);
 }
 
 function regionKeyNav(e) {
-  const drop = $("regionDrop");
+  const drop = document.getElementById("regionDrop");
   const opts = drop.querySelectorAll(".custom-opt");
   if (!opts.length) return;
   if (e.key === "ArrowDown") {
@@ -546,14 +515,14 @@ function regionKeyNav(e) {
 
 // 시/군/구
 function openDistrictDrop() {
-  filterDistrictOptions($("selDistrictInput").value);
+  filterDistrictOptions(document.getElementById("selDistrictInput").value);
 }
 
 function filterDistrictOptions(q) {
-  const region = $("selRegion").value;
+  const region = document.getElementById("selRegion").value;
   if (!region) return;
   const list = DISTRICTS[region] || [];
-  const drop = $("districtDrop");
+  const drop = document.getElementById("districtDrop");
   const filtered = q ? list.filter(d => d.includes(q)) : list;
   drop.innerHTML = "";
   const all = document.createElement("div");
@@ -573,13 +542,13 @@ function filterDistrictOptions(q) {
 }
 
 function selectDistrictOpt(val, label) {
-  $("selDistrict").value = val;
-  $("selDistrictInput").value = label === "전체" ? "" : label;
-  $("districtDrop").style.display = "none";
+  document.getElementById("selDistrict").value = val;
+  document.getElementById("selDistrictInput").value = label === "전체" ? "" : label;
+  document.getElementById("districtDrop").style.display = "none";
 }
 
 function districtKeyNav(e) {
-  const drop = $("districtDrop");
+  const drop = document.getElementById("districtDrop");
   const opts = drop.querySelectorAll(".custom-opt");
   if (!opts.length) return;
   if (e.key === "ArrowDown") {
@@ -605,9 +574,9 @@ function districtKeyNav(e) {
 }
 
 function updateDistricts(region) {
-  const inp = $("selDistrictInput");
-  const hid = $("selDistrict");
-  const drop = $("districtDrop");
+  const inp = document.getElementById("selDistrictInput");
+  const hid = document.getElementById("selDistrict");
+  const drop = document.getElementById("districtDrop");
   inp.value = ""; hid.value = ""; drop.style.display = "none";
   inp.disabled = !region;
   inp.placeholder = region ? "전체 (입력 또는 스크롤)" : "시/도를 먼저 선택하세요";
@@ -615,15 +584,15 @@ function updateDistricts(region) {
 
 // 드롭다운 외부 클릭 시 닫기
 document.addEventListener("click", e => {
-  if (!e.target.closest("#regionWrap"))   $("regionDrop").style.display = "none";
-  if (!e.target.closest("#districtWrap")) $("districtDrop").style.display = "none";
+  if (!e.target.closest("#regionWrap"))   document.getElementById("regionDrop").style.display = "none";
+  if (!e.target.closest("#districtWrap")) document.getElementById("districtDrop").style.display = "none";
 });
 
 // ── 관리자 ───────────────────────────────────────────────
 function toggleAdmin() {
   if (adminOpen) {
     adminOpen = false;
-    $("adminPanel").classList.remove("open");
+    document.getElementById("adminPanel").classList.remove("open");
     return;
   }
   const pw = prompt("관리자 비밀번호를 입력하세요.");
@@ -633,7 +602,7 @@ function toggleAdmin() {
     return;
   }
   adminOpen = true;
-  $("adminPanel").classList.add("open");
+  document.getElementById("adminPanel").classList.add("open");
 }
 
 // ── 데이터 로드 ──────────────────────────────────────────
@@ -642,35 +611,48 @@ function initTokenUI() {}
 
 // ── 수동 새로고침 ────────────────────────────────────────
 async function manualRefresh() {
-  // 헬퍼: 새로고침 버튼 일괄 상태 변경
-  const setRefreshBtns = (text, disabled) =>
-    REFRESH_BTN_IDS.forEach(id => {
-      const btn = $(id);
-      if (btn) { btn.textContent = text; btn.disabled = disabled; }
-    });
+  // 버튼 비활성화
+  ["refreshBtn","dashRefreshBtn"].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) { btn.textContent = "⏳ 불러오는 중..."; btn.disabled = true; }
+  });
 
-  setRefreshBtns("⏳ 불러오는 중...", true);
+  // 1단계: 화면 초기화 (값이 비워지는 느낌)
   setStatus('<span class="spinner"></span>데이터 새로고침 중...');
+  const summary = document.getElementById("dashSummary");
+  const grid    = document.getElementById("dashGrid");
+  if (summary) summary.style.opacity = "0.3";
+  if (grid)    grid.style.opacity    = "0.3";
 
-  // 대시보드 영역 흐리게 처리
-  const fadeEls = [$("dashSummary"), $("dashGrid")].filter(Boolean);
-  fadeEls.forEach(el => el.style.opacity = "0.3");
-
-  // 캐시 무효화 (날짜 기반 키 + 계약 캐시)
+  // 2단계: 캐시 무효화
   Object.keys(localStorage).forEach(k => {
-    if (k.startsWith(LS_KEY_PREFIX) || k.startsWith(LS_META_PREFIX)) localStorage.removeItem(k);
+    if (k.startsWith("semusa_data_") || k.startsWith("semusa_meta_")) {
+      localStorage.removeItem(k);
+    }
   });
   localStorage.removeItem(LS_CONTRACT);
 
+  // 3단계: 데이터 새로 로드
   await loadData();
 
-  // 페이드인 복구
-  fadeEls.forEach(el => { el.style.transition = "opacity 0.4s"; el.style.opacity = "1"; });
+  // 4단계: 화면 복구 (페이드인)
+  if (summary) { summary.style.transition = "opacity 0.4s"; summary.style.opacity = "1"; }
+  if (grid)    { grid.style.transition    = "opacity 0.4s"; grid.style.opacity    = "1"; }
 
-  if ($("tab-dashboard")?.classList.contains("active")) renderDashboard();
+  // 배정현황 탭 갱신
+  if (document.getElementById("tab-dashboard")?.classList.contains("active")) renderDashboard();
 
-  setRefreshBtns("✅ 완료", false);
-  setTimeout(() => setRefreshBtns("🔄 새로고침", false), 2000);
+  // 버튼 복구
+  ["refreshBtn","dashRefreshBtn"].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) { btn.textContent = "✅ 완료"; btn.disabled = false; }
+  });
+  setTimeout(() => {
+    ["refreshBtn","dashRefreshBtn"].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.textContent = "🔄 새로고침";
+    });
+  }, 2000);
 }
 
 async function loadData() {
@@ -723,15 +705,14 @@ async function loadAirtable() {
     if (data.error) throw new Error(data.error);
 
     CONTRACT_MAP = data.map || {};
-    buildContractIndex(); // O(1) 조회를 위한 역방향 인덱스 빌드
     localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, updatedAt: data.updatedAt || new Date().toISOString() }));
     updateStatusBar();
-    if ($("tab-dashboard")?.classList.contains("active")) renderDashboard();
+    if (document.getElementById("tab-dashboard")?.classList.contains("active")) renderDashboard();
 
   } catch(e) {
     // 실패 시 캐시 사용
     const cached = localStorage.getItem(LS_CONTRACT);
-    if (cached) { CONTRACT_MAP = JSON.parse(cached).map || {}; buildContractIndex(); }
+    if (cached) CONTRACT_MAP = JSON.parse(cached).map || {};
     updateStatusBar();
   }
 }
@@ -743,21 +724,24 @@ function updateStatusBar() {
     setStatus('⚠️ <span style="color:var(--danger)">데이터를 불러올 수 없습니다.</span>');
     return;
   }
-  const count    = TAX_DATA.length || meta?.count || 0;
-  const src      = meta ? (meta.source === "Google Sheets" ? "☁️ Google Sheets" : `📦 ${meta.source}`) : "📦 캐시";
-  const atStatus = Object.keys(CONTRACT_MAP).length > 0 ? "🔄 계약현황 실시간 연동"
-                 : contractCache ? "📦 계약현황 캐시" : "⚠️ 계약현황 로드 실패";
-  const d = formatDateTime(meta ? new Date(meta.updatedAt) : new Date());
+  const count = TAX_DATA.length || (meta ? meta.count : 0);
+  const src = meta ? (meta.source === "Google Sheets" ? "☁️ Google Sheets" : `📦 ${meta.source}`) : "📦 캐시";
+  const atStatus = Object.keys(CONTRACT_MAP).length > 0
+    ? `🔄 계약현황 실시간 연동`
+    : contractCache ? `📦 계약현황 캐시` : `⚠️ 계약현황 로드 실패`;
+  const dt = meta ? new Date(meta.updatedAt) : new Date();
+  const d = `${dt.getFullYear()}.${pad(dt.getMonth()+1)}.${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
   setStatus(`✅ <strong>${count}명</strong> &nbsp;·&nbsp; 세무사정보: <strong>${d}</strong> (${src}) &nbsp;·&nbsp; ${atStatus}`);
 }
 
 function showStatus(meta, cached=false) { updateStatusBar(); }
-function setStatus(html) { $("statusText").innerHTML = html; }
+function setStatus(html) { document.getElementById("statusText").innerHTML = html; }
+function pad(n) { return String(n).padStart(2,"0"); }
 
 // ── 파일 업로드 ──────────────────────────────────────────
 function handleFile(file) {
   if (!file) return;
-  const us = $("uploadStatus");
+  const us = document.getElementById("uploadStatus");
   us.style.display="block"; us.style.background="#f5f5f3"; us.style.color="#6b6b6b";
   us.innerHTML='<span class="spinner"></span>파일 읽는 중...';
   const reader = new FileReader();
@@ -827,232 +811,99 @@ const SEARCH_COORDS = {
   "울산":[35.5384,129.3114],
   "대전":[36.3504,127.3845],
   "광주":[35.1595,126.8526],
-  "세종":[36.48,127.289],
-  "충청":[36.6588,127.2],
+  "세종":[36.4801,127.2892],
+  "강원":[37.8813,127.73],
   "충청남도":[36.5184,126.8],
   "충청북도":[36.991,127.929],
-  "전라":[35.7175,127.153],
   "전라남도":[34.8679,126.991],
   "전라북도":[35.7175,127.153],
-  "경상":[35.6,128.2],
   "경상남도":[35.4606,128.2132],
   "경상북도":[36.4919,128.8889],
-  "강원":[37.8813,127.73],
   "제주":[33.489,126.4983],
-  "가평군":[37.8314,127.5096],
+  "가평군":[37.8314,127.51],
   "강릉시":[37.7519,128.8761],
-  "강진군":[34.6421,126.7673],
-  "거제시":[34.8919,128.6211],
-  "거창군":[35.6867,127.9095],
-  "경산시":[35.8251,128.7348],
-  "경주시":[35.8562,129.2128],
-  "계룡시":[36.2745,127.2483],
-  "고령군":[35.7247,128.2625],
-  "고성군":[34.9765,128.3235],
-  "고양시":[37.6582,126.832],
-  "고창군":[35.4358,126.7021],
-  "고흥군":[34.6036,127.2842],
-  "곡성군":[35.282,127.292],
-  "공주시":[36.4465,127.119],
-  "과천시":[37.4293,126.9877],
-  "광명시":[37.4785,126.8646],
-  "광양시":[34.9407,127.6961],
-  "광주시":[37.4294,127.2551],
-  "괴산군":[36.8153,127.7925],
-  "구례군":[35.2025,127.4628],
+  "경주시":[35.8562,129.2247],
+  "고양시":[37.6584,126.832],
+  "과천시":[37.4292,126.9877],
+  "광명시":[37.4789,126.8647],
+  "광주시":[37.4295,127.2559],
   "구리시":[37.5943,127.1296],
-  "구미시":[36.1195,128.3443],
-  "군산시":[35.9676,126.7366],
-  "군포시":[37.3617,126.9353],
-  "금산군":[36.1089,127.4874],
-  "김제시":[35.8036,126.8808],
-  "김천시":[36.1394,128.1136],
-  "김포시":[37.6152,126.7156],
-  "김해시":[35.2332,128.8819],
-  "나주시":[35.0158,126.7107],
-  "남양주시":[37.636,127.2165],
-  "남원시":[35.4164,127.3905],
-  "남해군":[34.8377,127.8925],
-  "논산시":[36.1872,127.0986],
-  "단양군":[36.9846,128.3653],
-  "담양군":[35.3211,126.9882],
-  "당진시":[36.8897,126.6283],
-  "동두천시":[37.9036,127.0607],
-  "동해시":[37.5247,129.1143],
+  "구미시":[36.1195,128.3446],
+  "군산시":[35.9676,126.7368],
+  "군포시":[37.3614,126.9352],
+  "김포시":[37.615,126.716],
+  "김해시":[35.2281,128.8892],
+  "남양주시":[37.6359,127.2165],
   "목포시":[34.8118,126.3922],
-  "무안군":[34.9904,126.4792],
-  "무주군":[36.0068,127.6607],
-  "문경시":[36.5862,128.1868],
-  "밀양시":[35.5038,128.7466],
-  "보령시":[36.3333,126.6128],
-  "보성군":[34.7715,127.0798],
-  "보은군":[36.4895,127.7323],
-  "봉화군":[36.893,128.7326],
-  "부안군":[35.7316,126.7334],
-  "부여군":[36.2758,126.9084],
-  "부천시":[37.5034,126.7651],
-  "사천시":[35.0038,128.0642],
-  "산청군":[35.4155,127.8735],
-  "삼척시":[37.4499,129.165],
-  "상주시":[36.411,128.1593],
-  "서귀포시":[33.2541,126.5601],
-  "서산시":[36.7845,126.4504],
-  "서천군":[36.0803,126.6912],
-  "성남시":[37.4201,127.1265],
-  "성주군":[35.9194,128.2858],
-  "세종특별자치시":[36.4801,127.2892],
-  "속초시":[38.207,128.5915],
+  "부천시":[37.5034,126.766],
+  "성남시":[37.4449,127.1388],
   "수원시":[37.2636,127.0286],
-  "순창군":[35.3743,127.1373],
-  "순천시":[34.9506,127.4872],
-  "시흥시":[37.3801,126.8029],
-  "신안군":[34.8263,126.3516],
-  "아산시":[36.7898,127.0019],
-  "안동시":[36.5684,128.7296],
-  "안산시":[37.3219,126.8308],
-  "안성시":[37.008,127.2798],
+  "순천시":[34.9506,127.4877],
+  "시흥시":[37.3799,126.803],
+  "아산시":[36.7899,127.002],
+  "안산시":[37.3219,126.8309],
   "안양시":[37.3943,126.9568],
-  "양구군":[38.1095,127.9898],
-  "양산시":[35.3351,129.0375],
-  "양양군":[38.0754,128.6189],
-  "양주시":[37.7853,127.0458],
-  "양평군":[37.4917,127.4875],
+  "양주시":[37.7855,127.046],
+  "양평군":[37.4916,127.4877],
   "여수시":[34.7604,127.6622],
-  "여주시":[37.2984,127.6371],
-  "연천군":[38.0965,127.0754],
-  "영광군":[35.2773,126.512],
-  "영덕군":[36.415,129.3653],
-  "영동군":[36.1751,127.7835],
-  "영암군":[34.8001,126.6968],
-  "영양군":[36.6663,129.1122],
-  "영월군":[37.1838,128.4673],
-  "영주시":[36.8262,128.6236],
-  "영천시":[35.9733,128.9385],
-  "예산군":[36.6811,126.8433],
-  "예천군":[36.6569,128.4528],
-  "오산시":[37.1498,127.0775],
-  "옥천군":[36.3034,127.5683],
-  "완도군":[34.311,126.755],
-  "완주군":[35.9048,127.162],
+  "여주시":[37.2982,127.6374],
+  "연천군":[38.0967,127.0748],
+  "오산시":[37.1498,127.077],
   "용인시":[37.2411,127.1776],
-  "울릉군":[37.4845,130.9054],
-  "울진군":[36.993,129.4007],
   "원주시":[37.3422,127.9202],
-  "음성군":[36.9402,127.6905],
-  "의령군":[35.3222,128.2618],
-  "의성군":[36.3528,128.697],
-  "의왕시":[37.3448,126.9682],
-  "의정부시":[37.7381,127.0337],
-  "이천시":[37.2723,127.4431],
-  "익산시":[35.9483,126.9577],
-  "인제군":[38.0697,128.1703],
-  "임실군":[35.6178,127.2891],
-  "장성군":[35.3018,126.7848],
-  "장수군":[35.6472,127.5214],
-  "장흥군":[34.6815,126.907],
+  "의왕시":[37.3449,126.9688],
+  "의정부시":[37.7382,127.0438],
+  "이천시":[37.2724,127.4349],
+  "익산시":[35.9483,126.9578],
   "전주시":[35.8242,127.148],
-  "정선군":[37.3807,128.6608],
-  "정읍시":[35.5698,126.8573],
-  "제주시":[33.489,126.4983],
-  "제천시":[37.1326,128.2141],
-  "증평군":[36.7879,127.5866],
-  "진도군":[34.4868,126.2634],
-  "진안군":[35.7915,127.4249],
-  "진주시":[35.1798,128.1076],
-  "진천군":[36.8553,127.4357],
-  "창녕군":[35.5446,128.4922],
-  "창원시":[35.2277,128.6811],
-  "천안시":[36.8151,127.1139],
-  "철원군":[38.1461,127.3134],
-  "청도군":[35.6473,128.7343],
-  "청송군":[36.4358,129.0573],
-  "청양군":[36.459,126.8028],
+  "진주시":[35.18,128.1076],
+  "창원시":[35.228,128.6811],
+  "천안시":[36.8065,127.1523],
   "청주시":[36.6424,127.489],
-  "춘천시":[37.8813,127.7298],
-  "충주시":[36.991,127.9259],
-  "칠곡군":[35.9956,128.4019],
-  "태백시":[37.1641,128.9856],
-  "태안군":[36.7457,126.2979],
-  "통영시":[34.8544,128.4332],
-  "파주시":[37.76,126.7799],
-  "평창군":[37.3705,128.3902],
-  "평택시":[36.9922,127.1127],
-  "포천시":[37.8949,127.2003],
+  "춘천시":[37.8813,127.73],
+  "파주시":[37.7601,126.7799],
+  "평택시":[36.9921,127.1127],
+  "포천시":[37.8946,127.2003],
   "포항시":[36.019,129.3435],
-  "하남시":[37.5393,127.2148],
-  "하동군":[35.0673,127.7513],
-  "함안군":[35.2725,128.4065],
-  "함양군":[35.5204,127.7251],
-  "함평군":[35.0657,126.5165],
-  "합천군":[35.5667,128.1658],
-  "해남군":[34.5735,126.5991],
-  "홍성군":[36.6013,126.6608],
-  "홍천군":[37.6974,127.8887],
-  "화성시":[37.1995,126.8315],
-  "화순군":[35.0645,126.9865],
-  "화천군":[38.1058,127.7081],
-  "횡성군":[37.4912,127.9853]
+  "하남시":[37.5392,127.2148],
+  "화성시":[37.1996,126.8312]
 }
 const DISTRICT_COORDS = {
-  "강남구":[37.4959,127.0664],
-  "강동구":[37.5301,127.1237],
-  "강북구":[37.6396,127.0255],
-  "강서구":[37.5509,126.8494],
-  "계양구":[37.5374,126.7376],
-  "관악구":[37.4784,126.9515],
-  "광산구":[35.1396,126.7937],
-  "광진구":[37.5385,127.0824],
-  "구로구":[37.4954,126.8875],
-  "금천구":[37.4568,126.8954],
-  "남동구":[37.4469,126.7314],
-  "노원구":[37.6542,127.0568],
-  "달서구":[35.8296,128.5326],
-  "도봉구":[37.6688,127.0471],
-  "동대문구":[37.5744,127.04],
-  "동래구":[35.1998,129.0854],
-  "동작구":[37.5124,126.9395],
-  "마포구":[37.5662,126.9016],
-  "부평구":[37.5072,126.722],
-  "분당구":[37.3825,127.1178],
-  "사상구":[35.1504,128.9917],
-  "사하구":[35.1046,128.9748],
-  "서대문구":[37.5791,126.9368],
-  "서초구":[37.4837,127.0324],
-  "성동구":[37.5633,127.0371],
-  "성북구":[37.5891,127.0182],
-  "송파구":[37.5145,127.1058],
-  "수성구":[35.8586,128.6304],
-  "수영구":[35.1456,129.1133],
-  "양천구":[37.5169,126.8665],
-  "연수구":[37.4104,126.678],
-  "영등포구":[37.5263,126.8962],
-  "용산구":[37.5326,126.9904],
-  "유성구":[36.3621,127.3564],
-  "은평구":[37.6027,126.9291],
-  "종로구":[37.573,126.9794],
-  "중구":[37.5636,126.9975],
-  "중랑구":[37.6063,127.0931],
-  "광주광산구":[35.1396,126.7937],
-  "광주남구":[35.1329,126.9023],
-  "광주동구":[35.1461,126.9231],
-  "광주북구":[35.1741,126.9121],
-  "광주서구":[35.1521,126.8485],
-  "달성군":[35.7753,128.4313],
-  "대구군위군":[36.2428,128.5727],
-  "대구남구":[35.846,128.5911],
-  "대구달서구":[35.8298,128.5326],
-  "대구달성군":[35.7745,128.4312],
-  "대구동구":[35.8864,128.6355],
-  "대구북구":[35.892,128.5833],
-  "대구서구":[35.8718,128.5591],
-  "대구수성구":[35.8582,128.6305],
-  "대구중구":[35.8694,128.6062],
-  "대전남구":[36.314,127.3831],
-  "대전대덕구":[36.3468,127.4285],
-  "대전동구":[36.334,127.4395],
-  "대전서구":[36.3553,127.3837],
-  "대전유성구":[36.3622,127.3352],
-  "대전중구":[36.3251,127.4215],
+  "서울강남구":[37.4959,127.0664],
+  "서울강동구":[37.5301,127.1237],
+  "서울강북구":[37.6396,127.0255],
+  "서울강서구":[37.5509,126.8494],
+  "서울관악구":[37.4784,126.9515],
+  "서울광진구":[37.5385,127.0824],
+  "서울구로구":[37.4954,126.8875],
+  "서울금천구":[37.4568,126.8954],
+  "서울노원구":[37.6542,127.0568],
+  "서울도봉구":[37.6688,127.0471],
+  "서울동대문구":[37.5744,127.04],
+  "서울동작구":[37.5124,126.9395],
+  "서울마포구":[37.5662,126.9016],
+  "서울서대문구":[37.5791,126.9368],
+  "서울서초구":[37.4837,127.0324],
+  "서울성동구":[37.5633,127.0371],
+  "서울성북구":[37.5891,127.0182],
+  "서울송파구":[37.5145,127.1058],
+  "서울양천구":[37.5169,126.8665],
+  "서울영등포구":[37.5263,126.8962],
+  "서울용산구":[37.5326,126.9904],
+  "서울은평구":[37.6027,126.9291],
+  "서울종로구":[37.573,126.9794],
+  "서울중구":[37.5636,126.9975],
+  "서울중랑구":[37.6063,127.0931],
+  "인천강화군":[37.746,126.488],
+  "인천계양구":[37.5375,126.7377],
+  "인천남동구":[37.4475,126.7317],
+  "인천동구":[37.4811,126.6436],
+  "인천미추홀구":[37.4636,126.6506],
+  "인천부평구":[37.5071,126.7224],
+  "인천서구":[37.5451,126.6751],
+  "인천연수구":[37.4101,126.6781],
+  "인천옹진군":[37.4465,126.6508],
+  "인천중구":[37.4734,126.6326],
   "부산강서구":[35.2122,128.9805],
   "부산금정구":[35.2429,129.0924],
   "부산기장군":[35.2446,129.2122],
@@ -1068,34 +919,43 @@ const DISTRICT_COORDS = {
   "부산연제구":[35.1762,129.0795],
   "부산영도구":[35.0912,129.0677],
   "부산중구":[35.1062,129.0324],
-  "부산진구":[35.1629,129.053],
   "부산해운대구":[35.1631,129.1636],
+  "대구군위군":[36.2428,128.5727],
+  "대구남구":[35.846,128.5911],
+  "대구달서구":[35.8298,128.5326],
+  "대구달성군":[35.7745,128.4312],
+  "대구동구":[35.8864,128.6355],
+  "대구북구":[35.892,128.5833],
+  "대구서구":[35.8718,128.5591],
+  "대구수성구":[35.8582,128.6305],
+  "대구중구":[35.8694,128.6062],
   "울산남구":[35.5445,129.3303],
   "울산동구":[35.5052,129.4172],
   "울산북구":[35.5824,129.3614],
   "울산울주군":[35.5398,129.243],
   "울산중구":[35.5695,129.3323],
-  "인천강화군":[37.746,126.488],
-  "인천계양구":[37.5375,126.7377],
-  "인천남동구":[37.4475,126.7317],
-  "인천동구":[37.4811,126.6436],
-  "인천미추홀구":[37.4636,126.6506],
-  "인천부평구":[37.5071,126.7224],
-  "인천서구":[37.5451,126.6751],
-  "인천연수구":[37.4101,126.6781],
-  "인천옹진군":[37.4468,126.6372],
-  "인천중구":[37.4734,126.6326],
-  "판교":[37.3943,127.1108],
-  "해운대구":[35.1628,129.1639]
-}
-
-// METRO_SET: Array.includes O(n) → Set.has O(1)
-const METRO_SET = new Set(["서울","경기","인천","부산","대구","울산","대전","광주","충청","전라","경상","강원","제주","충청남도","충청북도","전라남도","전라북도","경상남도","경상북도","세종"]);
+  "대전대덕구":[36.346705,127.415562],
+  "대전동구":[36.334,127.4395],
+  "대전서구":[36.3553,127.3837],
+  "대전유성구":[36.3622,127.3352],
+  "대전중구":[36.3251,127.4215],
+  "광주광산구":[35.1396,126.7937],
+  "광주남구":[35.1329,126.9023],
+  "광주동구":[35.1461,126.9231],
+  "광주북구":[35.1741,126.9121],
+  "광주서구":[35.1521,126.8485]
+};
 
 function coordFromAddress(addr) {
   if (!addr) return null;
-  // 1순위: 구/군 단위
-  for (const [k,v] of Object.entries(DISTRICT_COORDS)) { if (addr.includes(k)) return v; }
+  // 1순위: 광역시+구명 조합 키 매칭
+  // 예) "서울시 강남구" → "서울" 포함 && "강남구" 포함 → "서울강남구" 키로 조회
+  for (const [k,v] of Object.entries(DISTRICT_COORDS)) {
+    // 조합 키(서울강남구, 부산강서구 등): 앞 2글자(지역)와 나머지(구명) 분리해서 매칭
+    const regionPart = k.slice(0,2);   // "서울", "부산", "인천" 등
+    const guPart     = k.slice(2);     // "강남구", "강서구" 등
+    if (addr.includes(regionPart) && addr.includes(guPart)) return v;
+  }
   // 2순위: 시군구 단위 (광역 제외)
   for (const [k,v] of Object.entries(SEARCH_COORDS)) {
     if (!METRO_SET.has(k) && addr.includes(k)) return v;
@@ -1128,39 +988,36 @@ function formatName(t) {
 
 function doSearch() {
   // 업종 필수 체크
-  const industryRaw = $("searchInput").value.trim();
-  const hint = $("requiredHint");
-  if (!industryRaw) { hint.classList.add("show"); $("searchInput").focus(); return; }
+  const industryRaw = document.getElementById("searchInput").value.trim();
+  const hint = document.getElementById("requiredHint");
+  if (!industryRaw) { hint.classList.add("show"); document.getElementById("searchInput").focus(); return; }
   hint.classList.remove("show");
 
   if (!TAX_DATA.length) {
-    $("results").innerHTML = `<div class="empty-state">데이터가 없습니다. 잠시 후 새로고침해주세요.</div>`;
+    document.getElementById("results").innerHTML = `<div class="empty-state">데이터가 없습니다. 잠시 후 새로고침해주세요.</div>`;
     return;
   }
 
-  // 검색 버튼 로딩 표시 (클로저로 searchBtn 안전하게 캡처)
+  // 검색 버튼 로딩 표시 (버그 #3 수정: 클로저로 searchBtn 안전하게 참조)
   const searchBtn = document.querySelector(".btn-search");
   if (searchBtn) { searchBtn.textContent = "검색 중..."; searchBtn.disabled = true; }
 
   // 로딩 스피너 표시
-  $("results").innerHTML = `<div class="search-loading"><span class="spinner"></span>검색 중...</div>`;
+  document.getElementById("results").innerHTML = `<div style="padding:2rem;text-align:center;color:var(--text-sub);font-size:14px"><span class="spinner"></span>검색 중...</div>`;
 
   // 300ms 후 결과 표시
   setTimeout(() => {
+    // searchBtn을 클로저로 캡처했으므로 안전하게 복원
     if (searchBtn) { searchBtn.textContent = "검색하기"; searchBtn.disabled = false; }
 
-  const region   = $("selRegion").value;
-  const district = $("selDistrict").value;
-  const biz      = $("selBiz").value;
-  const srOnly   = $("chkSR").checked;
+  const region   = document.getElementById("selRegion").value;
+  const district = document.getElementById("selDistrict").value;
+  const biz      = document.getElementById("selBiz").value;
+  const srOnly   = document.getElementById("chkSR").checked;
   const industries = industryRaw.split(/[,，、]/).map(s=>s.trim()).filter(Boolean);
 
   // 검색 기준 좌표: 시군구 우선, 없으면 시도
-  // 광역시 구(북구/남구 등) 중복 방지: region+district 조합 키 먼저 시도
-  // 광역시 구 조합키: "부산"+"강서구"="부산강서구", "광주"+"북구"="광주북구" 등
-  const regionDistrictKey = region && district ? region + district : null;
-  const searchCoord = (regionDistrictKey && (DISTRICT_COORDS[regionDistrictKey] || SEARCH_COORDS[regionDistrictKey]))
-                    || (district && (DISTRICT_COORDS[district] || SEARCH_COORDS[district]))
+  const searchCoord = (district && (DISTRICT_COORDS[district]||SEARCH_COORDS[district]))
                     || (region && SEARCH_COORDS[region])
                     || null;
 
@@ -1255,45 +1112,26 @@ function doSearch() {
 }
 
 // ── 렌더링 ───────────────────────────────────────────────
-/**
- * CONTRACT_MAP의 역방향 조회 인덱스 (지점명 → contractKey).
- * CONTRACT_MAP 업데이트 시 buildContractIndex()로 재빌드.
- * getRemaining 내 Object.keys 반복 O(n) → Map 조회 O(1) 개선.
- */
-let _contractIndex = new Map(); // key: 지점명 소문자, value: CONTRACT_MAP 키
-
-function buildContractIndex() {
-  _contractIndex = new Map();
-  for (const ck of Object.keys(CONTRACT_MAP)) {
-    _contractIndex.set(ck.toLowerCase(), ck);
-    // 부분 매칭 대비: 각 단어도 등록
-    for (const word of ck.split(/\s+/)) {
-      if (word.length > 1 && !_contractIndex.has(word.toLowerCase())) {
-        _contractIndex.set(word.toLowerCase(), ck);
-      }
-    }
-  }
-}
-
 function getRemaining(t) {
-  // 1차: 정확히 일치 (O(1))
-  let contractKey = null;
+  // Google Sheets 최대 수임 수 - Airtable 실제 계약 수
+  // 지점명(slack) 또는 상호로 매칭 시도
   const keys = [t.branch, t.firm, t.name].filter(Boolean);
+  let contract = null;
   for (const k of keys) {
-    const direct = CONTRACT_MAP[k];
-    if (direct) { contractKey = k; break; }
-    // 2차: 인덱스 기반 소문자 매칭 (O(1))
-    const idxKey = _contractIndex.get(k.toLowerCase());
-    if (idxKey) { contractKey = idxKey; break; }
+    if (CONTRACT_MAP[k]) { contract = CONTRACT_MAP[k]; break; }
+    // 부분 매칭 (예: "SAVETAX 삼성지점" ↔ "삼성지점")
+    const matched = Object.keys(CONTRACT_MAP).find(ck =>
+      ck.includes(k) || k.includes(ck)
+    );
+    if (matched) { contract = CONTRACT_MAP[matched]; break; }
   }
-  const contract = contractKey ? CONTRACT_MAP[contractKey] : null;
   const usedInd  = contract ? contract.individual : 0;
   const usedCorp = contract ? contract.corporate  : 0;
-  // SR 세무사는 SR 전용 수임 가능 수 우선 사용
+  // SR 세무사는 SR전용 수임 가능 수 우선 사용
   const maxInd  = (t.sr && t.srIndividual !== null) ? t.srIndividual : t.individual;
   const maxCorp = (t.sr && t.srCorporate  !== null) ? t.srCorporate  : t.corporate;
-  const remInd  = maxInd  !== null ? Math.max(0, maxInd  - usedInd)  : null;
-  const remCorp = maxCorp !== null ? Math.max(0, maxCorp - usedCorp) : null;
+  const remInd   = maxInd  !== null ? Math.max(0, maxInd  - usedInd)  : null;
+  const remCorp  = maxCorp !== null ? Math.max(0, maxCorp - usedCorp) : null;
   return { remInd, remCorp, usedInd, usedCorp };
 }
 
@@ -1315,25 +1153,22 @@ function capInfo(t, biz) {
 }
 
 function renderResults(list, q) {
-  const el = $("results");
+  const el = document.getElementById("results");
   let tags = "";
-  if (q.region)            tags+=`<span class="tag tag-blue">📍 ${q.region}${q.district?" "+q.district:""}</span>`;
-  if (q.industries.length) tags+=`<span class="tag tag-green">🏭 ${q.industries.join(", ")}</span>`;
-  if (q.biz)               tags+=`<span class="tag tag-purple">🏢 ${q.biz==="개인"?"개인사업자":"법인사업자"}</span>`;
-  if (q.srOnly)            tags+=`<span class="tag tag-blue">SR수임</span>`;
+  if (q.region)            tags+=`<span class="tag" style="background:#E6F1FB;color:#185FA5">📍 ${q.region}${q.district?" "+q.district:""}</span>`;
+  if (q.industries.length) tags+=`<span class="tag" style="background:#E1F5EE;color:#0F6E56">🏭 ${q.industries.join(", ")}</span>`;
+  if (q.biz)               tags+=`<span class="tag" style="background:#EEEDFE;color:#3C3489">🏢 ${q.biz==="개인"?"개인사업자":"법인사업자"}</span>`;
+  if (q.srOnly)            tags+=`<span class="tag" style="background:#E6F1FB;color:#185FA5">SR수임</span>`;
 
   if (!list.length) {
     el.innerHTML=`<div class="result-header">${tags}</div><div class="empty-state">조건에 맞는 세무사가 없습니다.<br><span style="font-size:13px;margin-top:6px;display:block">업종명을 다르게 입력하거나 지역 조건을 넓혀보세요.</span></div>`;
     return;
   }
 
-  // SECTION_CONFIG: 섹션별 스타일·텍스트 중앙 관리 (DRY 적용)
-  const SECTION_CONFIG = {
-    A: { dividerText: null,   bg: "#E1F5EE", col: "#0F6E56", badge: "수임 가능"  },
-    B: { dividerText: "확인 필요 (수임 가능 · 잔여 없음 또는 업종 불명확)",
-         bg: "#FAEEDA", col: "#854F0B", badge: "확인 필요"  },
-    C: { dividerText: "수임 불가",
-         bg: "#FAECE7", col: "#993C1D", badge: "수임 불가"  },
+  const SECTION_LABELS = {
+    "A": null,
+    "B": { text:"확인 필요 (수임 가능 · 잔여 없음 또는 업종 불명확)", bg:"#FAEEDA", col:"#854F0B" },
+    "C": { text:"수임 불가", bg:"#FAECE7", col:"#993C1D" },
   };
 
   let html = `<div class="result-header">${tags}<span class="result-count">— <strong>${list.length}명</strong> 매칭</span></div>`;
@@ -1343,19 +1178,27 @@ function renderResults(list, q) {
     // 섹션 구분선
     if (t.section !== lastSection) {
       lastSection = t.section;
-      const sc = SECTION_CONFIG[t.section];
-      if (sc.dividerText) {
-        html += `<div class="section-divider">
-          <span class="section-divider-label" style="background:${sc.bg};color:${sc.col}">${sc.dividerText}</span>
-          <div class="section-divider-line"></div>
+      const lbl = SECTION_LABELS[t.section];
+      if (lbl) {
+        html += `<div style="display:flex;align-items:center;gap:8px;margin:20px 0 10px;">
+          <span style="font-size:12px;font-weight:700;padding:4px 14px;border-radius:20px;background:${lbl.bg};color:${lbl.col}">${lbl.text}</span>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
         </div>`;
       }
     }
 
     const cap = capInfo(t, q.biz);
 
-    // SECTION_CONFIG로 섹션별 스타일 일괄 관리 (중복 삼항연산자 제거)
-    const SC = SECTION_CONFIG[t.section];
+    // 뱃지 스타일
+    const sBg  = t.section==="A" ? "#E1F5EE" : t.section==="B" ? "#FAEEDA" : "#FAECE7";
+    const sCol = t.section==="A" ? "#0F6E56" : t.section==="B" ? "#854F0B" : "#993C1D";
+    const sLbl = t.section==="A" ? "수임 가능" : t.section==="B" ? "확인 필요" : "수임 불가";
+    // 잔여 수임 표시 (B: 잔여0 강조)
+    if (t.section==="B" && t.remaining !== null && t.remaining === 0) {
+      if (!cap) { /* cap이 없으면 잔여0 직접 표시 */ }
+    }
+
+    // 카드 스타일
     const borderStyle = t.section==="A" ? "border:1.5px solid var(--primary-mid)" : "border:1px solid var(--border)";
     const avatarCls   = t.section==="A" ? "avail" : "unavail";
 
@@ -1378,7 +1221,7 @@ function renderResults(list, q) {
     html += distBadge;
     html += `</div></div></div>`;
     html += `<div class="card-right">`;
-    html += `<span class="badge-status" style="background:${SC.bg};color:${SC.col}">${SC.badge}</span>`;
+    html += `<span class="badge-status" style="background:${sBg};color:${sCol}">${sLbl}</span>`;
     if (cap) html += `<span class="cap-text">${cap}</span>`;
     html += `</div></div>`;
     html += `<div class="card-info">`;
@@ -1407,7 +1250,7 @@ function renderResults(list, q) {
   el.innerHTML = html;
 }
 
-$("searchInput").addEventListener("keydown", e=>{ if(e.key==="Enter") doSearch(); });
+document.getElementById("searchInput").addEventListener("keydown", e=>{ if(e.key==="Enter") doSearch(); });
 // loadData와 scheduleAutoRefresh는 잠금 해제 후 호출됨
 
 // ── 자동 갱신 (업무시간 9~19시, 30분 간격) ───────────────
@@ -1417,7 +1260,7 @@ function scheduleAutoRefresh() {
     if (h >= 9 && h < 19) {
       loadData();
       // 배정현황 탭이 열려있으면 대시보드도 갱신
-      if ($("tab-dashboard")?.classList.contains("active")) {
+      if (document.getElementById("tab-dashboard")?.classList.contains("active")) {
         renderDashboard();
       }
     }
@@ -1430,7 +1273,7 @@ function scheduleAutoRefresh() {
 function switchTab(name, btn) {
   document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
   document.querySelectorAll(".tab-btn").forEach(el => el.classList.remove("active"));
-  $("tab-" + name).classList.add("active");
+  document.getElementById("tab-" + name).classList.add("active");
   btn.classList.add("active");
   if (name === "dashboard") renderDashboard();
 }
@@ -1463,8 +1306,8 @@ function isFullyBooked(t) { return getBookingStatus(t) === "full"; }
 
 // ── 배정 현황 렌더링 ──────────────────────────────────────
 function renderDashboard() {
-  const grid = $("dashGrid");
-  const updEl = $("dashUpdated");
+  const grid = document.getElementById("dashGrid");
+  const updEl = document.getElementById("dashUpdated");
 
   if (!TAX_DATA.length) {
     grid.innerHTML = `<div style="font-size:14px;color:var(--text-sub);padding:2rem;text-align:center">세무사 데이터가 없습니다. 새로고침해주세요.</div>`;
@@ -1480,8 +1323,8 @@ function renderDashboard() {
     updEl.textContent = "⚠️ 계약 현황 미연동 — 관리자 패널에서 토큰을 설정해주세요.";
   }
 
-  const srIndOnly  = $("dashSrIndOnly")?.checked  || false;
-  const srCorpOnly = $("dashSrCorpOnly")?.checked || false;
+  const srIndOnly  = document.getElementById("dashSrIndOnly")?.checked  || false;
+  const srCorpOnly = document.getElementById("dashSrCorpOnly")?.checked || false;
 
   // ── 총계 계산 ────────────────────────────────────────────
   let totalMaxInd = 0, totalMaxCorp = 0;
@@ -1535,7 +1378,7 @@ function renderDashboard() {
     </div>`;
   }
 
-  const summaryEl = $("dashSummary");
+  const summaryEl = document.getElementById("dashSummary");
   if (summaryEl) {
     summaryEl.innerHTML =
       summaryCard("법인 전체",   totalMaxCorp,   totalUsedCorp,   totalRemCorp,   "#185FA5") +
@@ -1718,41 +1561,37 @@ console.log("💡 Console에서 runTests() 를 호출하면 자가 진단을 실
 
 <script>
 // ── 비밀번호 잠금 ─────────────────────────────────────────
-const LOCK_KEY  = "semusa_auth_v1";
-// 비밀번호는 SHA-256 해시로만 저장 — 원문은 코드에 없음
-const LOCK_HASH = "96e769f0354c28525960af56798aacff08ceeba7f70c9e4f5bfdbbd8da7d9fbd";
+const LOCK_KEY = "semusa_auth_v1";
+const LOCK_PW  = "unitblack26@!";
 
-/** 잠금 해제 후 앱 초기화 공통 로직 */
-function unlockAndInit() {
-  $("lockScreen").style.display = "none";
-  $("mainContent").style.display = "block";
-  loadData();
-  initTokenUI();
-  scheduleAutoRefresh();
-}
-
-async function checkPassword() {
-  const val = $("lockInput").value;
-  // 입력값을 SHA-256 해시로 변환 후 저장된 해시와 비교
-  const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(val));
-  const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2,"0")).join("");
-  if (hashHex === LOCK_HASH) {
+function checkPassword() {
+  const val = document.getElementById("lockInput").value;
+  if (val === LOCK_PW) {
     sessionStorage.setItem(LOCK_KEY, "1");
-    unlockAndInit();
+    document.getElementById("lockScreen").style.display = "none";
+    document.getElementById("mainContent").style.display = "block";
+    loadData();
+    initTokenUI();
+    scheduleAutoRefresh();
   } else {
-    $("lockError").style.display = "block";
-    $("lockInput").value = "";
-    $("lockInput").focus();
+    document.getElementById("lockError").style.display = "block";
+    document.getElementById("lockInput").value = "";
+    document.getElementById("lockInput").focus();
   }
 }
 
-// 페이지 로드 시 인증 확인
+// 페이지 로드 시 인증 확인 (버그 #2 수정: 이미 인증된 경우도 loadData 호출)
 (function() {
   if (sessionStorage.getItem(LOCK_KEY) === "1") {
-    unlockAndInit(); // 이미 인증된 경우에도 동일한 초기화 로직 실행
+    document.getElementById("lockScreen").style.display = "none";
+    document.getElementById("mainContent").style.display = "block";
+    // 이미 인증된 상태에서도 데이터 로드 + 자동 갱신 시작
+    loadData();
+    initTokenUI();
+    scheduleAutoRefresh();
   } else {
-    $("lockScreen").style.display = "flex";
-    $("mainContent").style.display = "none";
+    document.getElementById("lockScreen").style.display = "flex";
+    document.getElementById("mainContent").style.display = "none";
   }
 })();
 </script>
