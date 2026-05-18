@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --primary:#0F6E56;--primary-light:#E1F5EE;--primary-mid:#9FE1CB;
+    --primary:#006aff;--primary-light:#E6F0FF;--primary-mid:#99C5FF;
     --accent:#185FA5;--accent-light:#E6F1FB;
     --warn:#854F0B;--warn-light:#FAEEDA;
     --danger:#993C1D;--danger-light:#FAECE7;
@@ -239,7 +239,7 @@
     />
     <div id="lockError" style="font-size:12px;color:#993C1D;margin-bottom:10px;display:none;">⚠️ 비밀번호가 올바르지 않습니다.</div>
     <button onclick="checkPassword()"
-      style="width:100%;padding:12px;font-size:15px;font-weight:700;font-family:'Noto Sans KR',sans-serif;background:#0F6E56;color:#fff;border:none;border-radius:8px;cursor:pointer;">
+      style="width:100%;padding:12px;font-size:15px;font-weight:700;font-family:'Noto Sans KR',sans-serif;background:#006aff;color:#fff;border:none;border-radius:8px;cursor:pointer;">
       입력
     </button>
   </div>
@@ -823,7 +823,7 @@ function finishUpload(rows, filename, us) {
   localStorage.setItem(LS_KEY,JSON.stringify(parsed)); localStorage.setItem(LS_META,JSON.stringify(meta));
   updateStatusBar();
   const dt=new Date();
-  us.style.background="#E1F5EE";us.style.color="#0F6E56";
+  us.style.background="#E6F0FF";us.style.color="#006aff";
   us.innerHTML=`✅ ${parsed.length}명 업로드 완료 · ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
 }
 
@@ -1322,7 +1322,7 @@ function renderResults(list, q) {
   const el = $("results");
   let tags = "";
   if (q.region)            tags+=`<span class="tag" style="background:#E6F1FB;color:#185FA5">📍 ${q.region}${q.district?" "+q.district:""}</span>`;
-  if (q.industries.length) tags+=`<span class="tag" style="background:#E1F5EE;color:#0F6E56">🏭 ${q.industries.join(", ")}</span>`;
+  if (q.industries.length) tags+=`<span class="tag" style="background:#E6F0FF;color:#006aff">🏭 ${q.industries.join(", ")}</span>`;
   if (q.biz)               tags+=`<span class="tag" style="background:#EEEDFE;color:#3C3489">🏢 ${q.biz==="개인"?"개인사업자":"법인사업자"}</span>`;
   if (q.srOnly)            tags+=`<span class="tag" style="background:#E6F1FB;color:#185FA5">SR수임</span>`;
 
@@ -1356,8 +1356,8 @@ function renderResults(list, q) {
     const cap = capInfo(t, q.biz);
 
     // 뱃지 스타일
-    const sBg  = t.section==="A" ? "#E1F5EE" : t.section==="B" ? "#FAEEDA" : "#FAECE7";
-    const sCol = t.section==="A" ? "#0F6E56" : t.section==="B" ? "#854F0B" : "#993C1D";
+    const sBg  = t.section==="A" ? "#E6F0FF" : t.section==="B" ? "#FAEEDA" : "#FAECE7";
+    const sCol = t.section==="A" ? "#006aff" : t.section==="B" ? "#854F0B" : "#993C1D";
     const sLbl = t.section==="A" ? "수임 가능" : t.section==="B" ? "확인 필요" : "수임 불가";
     // 잔여 수임 표시 (B: 잔여0 강조)
     if (t.section==="B" && t.remaining !== null && t.remaining === 0) {
@@ -1372,8 +1372,8 @@ function renderResults(list, q) {
     let distBadge = "";
     if (q.searchCoord && t.distKm < 9999) {
       const km = Math.round(t.distKm);
-      const dBg = km<50?"#E1F5EE":km<150?"#E6F1FB":km<300?"#FAEEDA":"#FAECE7";
-      const dCol= km<50?"#0F6E56":km<150?"#185FA5":km<300?"#854F0B":"#993C1D";
+      const dBg = km<50?"#E6F0FF":km<150?"#E6F1FB":km<300?"#FAEEDA":"#FAECE7";
+      const dCol= km<50?"#006aff":km<150?"#185FA5":km<300?"#854F0B":"#993C1D";
       distBadge = `<span class="tag" style="background:${dBg};color:${dCol};font-size:11px">📏 ${km}km</span>`;
     }
 
@@ -1666,7 +1666,7 @@ function renderDashboard() {
   if (summaryEl) {
     summaryEl.innerHTML =
       summaryCard("법인 전체",   totalMaxCorp,   totalUsedCorp,   totalRemCorp,   "#185FA5") +
-      summaryCard("개인 전체",   totalMaxInd,    totalUsedInd,    totalRemInd,    "#0F6E56") +
+      summaryCard("개인 전체",   totalMaxInd,    totalUsedInd,    totalRemInd,    "#006aff") +
       `<div style="grid-column:1/-1;height:1px;background:var(--border);margin:4px 0;"></div>` +
       summaryCard("SR · 법인",   totalMaxSRCorp, totalUsedSRCorp, totalRemSRCorp, "#6B4EBB") +
       summaryCard("SR · 개인",   totalMaxSRInd,  totalUsedSRInd,  totalRemSRInd,  "#2E7D9E");
@@ -1689,7 +1689,7 @@ function renderDashboard() {
 
   // 섹션 순서: 수임가능 → 일부수임불가 → 수임불가
   const SECTIONS = [
-    { key:"ok",      label:"수임 가능",     dot:"🟢", bg:"#E1F5EE", col:"#0F6E56" },
+    { key:"ok",      label:"수임 가능",     dot:"🟢", bg:"#E6F0FF", col:"#006aff" },
     { key:"partial", label:"일부 수임 불가", dot:"🟡", bg:"#FAEEDA", col:"#854F0B" },
     { key:"full",    label:"수임 불가",      dot:"🔴", bg:"#FAECE7", col:"#993C1D" },
   ];
