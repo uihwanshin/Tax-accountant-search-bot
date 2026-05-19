@@ -1430,14 +1430,21 @@ function renderResults(list, q) {
     const { usedInd, usedCorp } = rem;
     const totalUsed = usedInd + usedCorp;
 
-    // 배정 비율 경고: 개인이 법인보다 많고 법인 비중이 30% 미만일 때
+    // 배정 비율 경고 (기준: 개인 70% : 법인 30%)
     let ratioWarning = "";
     if (totalUsed >= 2) {
-      const corpRatio = totalUsed > 0 ? usedCorp / totalUsed : 0;
-      const indRatio  = totalUsed > 0 ? usedInd  / totalUsed : 0;
-      if (usedInd > usedCorp && corpRatio < 0.3) {
+      const corpRatio = usedCorp / totalUsed;
+      const indRatio  = usedInd  / totalUsed;
+      if (corpRatio < 0.3) {
+        // 법인 비중 낮음
         ratioWarning = `<div class="match-box" style="background:var(--warn-light);color:var(--warn);margin-top:8px;">
-          ⚠️ 법인사업자 배정 비중 낮음
+          ⚠️ 법인사업자 배정 비중 낮음 — 법인 배정을 권장합니다.
+          <span style="font-size:11px;margin-left:6px;opacity:0.8">(개인 ${Math.round(indRatio*100)}% : 법인 ${Math.round(corpRatio*100)}%)</span>
+        </div>`;
+      } else if (indRatio < 0.3) {
+        // 개인 비중 낮음
+        ratioWarning = `<div class="match-box" style="background:#EEF3FF;color:#185FA5;margin-top:8px;">
+          ℹ️ 개인사업자 배정 비중 낮음 — 개인 배정을 권장합니다.
           <span style="font-size:11px;margin-left:6px;opacity:0.8">(개인 ${Math.round(indRatio*100)}% : 법인 ${Math.round(corpRatio*100)}%)</span>
         </div>`;
       }
@@ -2019,14 +2026,19 @@ function makeDashCard(t, status) {
     </div>`;
   }
 
-  // 배정 비율 경고
+  // 배정 비율 경고 (기준: 개인 70% : 법인 30%)
   const totalUsed = usedInd + usedCorp;
   let ratioRow = "";
   if (totalUsed >= 2) {
     const corpRatio = usedCorp / totalUsed;
-    if (usedInd > usedCorp && corpRatio < 0.3) {
+    const indRatio  = usedInd  / totalUsed;
+    if (corpRatio < 0.3) {
       ratioRow = `<div style="margin-top:6px;font-size:10px;color:var(--warn);font-weight:600;">
-        ⚠️ 법인 비중 낮음 (${Math.round(corpRatio*100)}%)
+        ⚠️ 법인 비중 낮음 (${Math.round(corpRatio*100)}%) — 법인 배정 권장
+      </div>`;
+    } else if (indRatio < 0.3) {
+      ratioRow = `<div style="margin-top:6px;font-size:10px;color:#185FA5;font-weight:600;">
+        ℹ️ 개인 비중 낮음 (${Math.round(indRatio*100)}%) — 개인 배정 권장
       </div>`;
     }
   }
