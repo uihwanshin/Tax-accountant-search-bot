@@ -1578,6 +1578,15 @@ function renderDailyTab() {
     const displayName = taxer ? formatName(taxer) : branch;
     const firmName    = taxer ? taxer.firm : "";
     const warn        = cnt.total >= 5;
+    const taxerRem    = taxer ? getRemaining(taxer) : {};
+    const dailyAvgFee = taxerRem.avgFee ?? null;
+    const dailyFeeRow = dailyAvgFee !== null ? (() => {
+      const ok = dailyAvgFee >= 110000;
+      return `<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:2px;">
+        <span style="color:var(--text-sub)">평균 기장료</span>
+        <strong style="color:${ok?"var(--primary)":"var(--danger)"}">${dailyAvgFee.toLocaleString()}원${ok?"":" ▼"}</strong>
+      </div>`;
+    })() : "";
 
     const indFull  = false;
     const corpFull = false;
@@ -1600,10 +1609,11 @@ function renderDailyTab() {
       <div style="height:5px;background:var(--border);border-radius:3px;margin-bottom:8px;">
         <div style="height:5px;border-radius:3px;width:${barWidth}%;background:${warn ? "var(--warn)" : "var(--primary)"};"></div>
       </div>
-      <div style="display:flex;gap:10px;font-size:12px;color:var(--text-sub);">
+      <div style="display:flex;gap:10px;font-size:12px;color:var(--text-sub);margin-bottom:${taxerRem.avgFee!==null&&taxerRem.avgFee!==undefined?"4px":"0"}">
         <span>👤 개인사업자 <strong style="color:var(--text)">${cnt.individual}건</strong></span>
         <span>🏢 법인사업자 <strong style="color:var(--text)">${cnt.corporate}건</strong></span>
       </div>
+      ${dailyFeeRow}
     </div>`;
   });
   html += '</div>';
@@ -1963,7 +1973,8 @@ function renderDashboard() {
 }
 
 function makeDashCard(t, status) {
-  const { usedInd, usedCorp } = getRemaining(t);
+  const rem = getRemaining(t);
+  const { usedInd, usedCorp, avgFee } = rem;
   const maxInd  = t.individual;
   const maxCorp = t.corporate;
   const indFull  = maxInd  !== null && usedInd  >= maxInd;
@@ -1997,11 +2008,36 @@ function makeDashCard(t, status) {
 
   const srBadge = t.sr ? `<span class="tag" style="background:#E6F1FB;color:#185FA5;font-size:10px;margin-left:4px">SR</span>` : "";
 
+  // 당월 평균 기장료 행
+  let feeRow = "";
+  if (avgFee !== null) {
+    const feeOk    = avgFee >= 110000;
+    const feeColor = feeOk ? "var(--primary)" : "var(--danger)";
+    feeRow = `<div class="dash-row" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border);">
+      <span class="dash-label" style="font-size:10px">평균 기장료</span>
+      <span style="font-size:11px;font-weight:700;color:${feeColor}">${avgFee.toLocaleString()}원${feeOk ? "" : " ▼"}</span>
+    </div>`;
+  }
+
+  // 배정 비율 경고
+  const totalUsed = usedInd + usedCorp;
+  let ratioRow = "";
+  if (totalUsed >= 2) {
+    const corpRatio = usedCorp / totalUsed;
+    if (usedInd > usedCorp && corpRatio < 0.3) {
+      ratioRow = `<div style="margin-top:6px;font-size:10px;color:var(--warn);font-weight:600;">
+        ⚠️ 법인 비중 낮음 (${Math.round(corpRatio*100)}%)
+      </div>`;
+    }
+  }
+
   return `<div class="dash-card" style="${cardBorder}">
     <div class="dash-name">${formatName(t)}${srBadge}</div>
     <div style="font-size:11px;color:var(--text-sub);margin-bottom:10px">${t.firm}</div>
     <div style="font-size:10px;color:var(--text-sub);margin-bottom:5px;font-weight:600;letter-spacing:0.3px">최대 수임 / 현재 계약 (잔여)</div>
     ${rows}
+    ${feeRow}
+    ${ratioRow}
   </div>`;
 }
 </script>
