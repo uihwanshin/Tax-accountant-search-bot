@@ -443,7 +443,7 @@
   <div class="tab-content" id="tab-lookup">
     <div style="margin-bottom:16px;">
       <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">🔎 업체 이력 조회</div>
-      <div style="font-size:12px;color:var(--text-sub)">상호명 또는 연락처로 기존 계약 이력을 조회합니다. 상호명으로 조회 시 중복 상호인 타 업체가 검색될 수 있으므로 주의가 필요합니다.</div>
+      <div style="font-size:12px;color:var(--text-sub)">상호명 또는 연락처로 기존 계약 이력을 조회합니다.</div>
     </div>
 
     <!-- 검색 입력 -->
@@ -1331,9 +1331,11 @@ function getRemaining(t) {
   const maxCorp = (t.sr && t.srCorporate  !== null) ? t.srCorporate  : t.corporate;
   const remInd   = maxInd  !== null ? Math.max(0, maxInd  - usedInd)  : null;
   const remCorp  = maxCorp !== null ? Math.max(0, maxCorp - usedCorp) : null;
-  return { remInd, remCorp, usedInd, usedCorp };
+  const feeSum   = contract ? (contract.feeSum   || 0) : 0;
+  const feeCount = contract ? (contract.feeCount || 0) : 0;
+  const avgFee   = feeCount > 0 ? Math.round(feeSum / feeCount) : null;
+  return { remInd, remCorp, usedInd, usedCorp, avgFee, feeCount };
 }
-
 
 function capInfo(t, biz) {
   const { remInd, remCorp } = getRemaining(t);
@@ -1423,10 +1425,51 @@ function renderResults(list, q) {
     html += `<span class="badge-status" style="background:${sBg};color:${sCol}">${sLbl}</span>`;
     if (cap) html += `<span class="cap-text">${cap}</span>`;
     html += `</div></div>`;
+    // ── 계약 현황 및 배정 비율 계산 ──
+    const rem = getRemaining(t);
+    const { usedInd, usedCorp } = rem;
+    const totalUsed = usedInd + usedCorp;
+
+    // 배정 비율 경고: 개인이 법인보다 많고 법인 비중이 30% 미만일 때
+    let ratioWarning = "";
+    if (totalUsed >= 2) {
+      const corpRatio = totalUsed > 0 ? usedCorp / totalUsed : 0;
+      const indRatio  = totalUsed > 0 ? usedInd  / totalUsed : 0;
+      if (usedInd > usedCorp && corpRatio < 0.3) {
+        ratioWarning = `<div class="match-box" style="background:var(--warn-light);color:var(--warn);margin-top:8px;">
+          ⚠️ 법인사업자 배정 비중 낮음
+          <span style="font-size:11px;margin-left:6px;opacity:0.8">(개인 ${Math.round(indRatio*100)}% : 법인 ${Math.round(corpRatio*100)}%)</span>
+        </div>`;
+      }
+    }
+
     html += `<div class="card-info">`;
     if (t.address) html += `<div class="card-info-row"><span>📍</span><span>${t.address}</span></div>`;
     if (t.phone && t.phone !== "-") html += `<div class="card-info-row"><span>📞</span><span>${t.phone.split("\n")[0]}</span></div>`;
+    // 계약 현황 (계약 수 있을 때만)
+    if (totalUsed > 0) {
+      html += `<div class="card-info-row" style="margin-top:4px;">
+        <span style="font-size:11px;color:var(--text-sub)">현재 계약</span>
+        <span style="font-size:11px;">
+          <span style="color:var(--text-sub)">개인</span> <strong style="color:var(--text)">${usedInd}</strong>
+          <span style="color:var(--border-strong);margin:0 4px">·</span>
+          <span style="color:var(--text-sub)">법인</span> <strong style="color:var(--text)">${usedCorp}</strong>
+        </span>
+      </div>`;
+    }
+    // 당월 평균 계약 기장료
+    if (rem.avgFee !== null) {
+      const feeOk    = rem.avgFee >= 110000;
+      const feeColor = feeOk ? "var(--primary)" : "var(--danger)";
+      const feeLabel = feeOk ? "" : ` <span style="font-size:10px;color:var(--danger)">▼ 평균 미달</span>`;
+      html += `<div class="card-info-row" style="margin-top:2px;">
+        <span style="font-size:11px;color:var(--text-sub)">당월 평균 계약 기장료</span>
+        <span style="font-size:11px;font-weight:700;color:${feeColor}">${rem.avgFee.toLocaleString()}원${feeLabel}</span>
+      </div>`;
+    }
     html += `</div>`;
+    // 배정 비율 경고
+    html += ratioWarning;
     // 업종 매칭 정보 표시 (A섹션 및 C섹션 중 매칭된 것)
     if (t.industryMatched && t.industries_ok) {
       const prev = t.industries_ok.slice(0,120)+(t.industries_ok.length>120?"…":"");
