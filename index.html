@@ -227,7 +227,7 @@
 <body>
 
 <!-- 비밀번호 잠금 화면 -->
-<div id="lockScreen" style="display:none;position:fixed;inset:0;background:#f8f8f6;z-index:9999;display:flex;align-items:center;justify-content:center;">
+<div id="lockScreen" style="display:none;position:fixed;inset:0;background:#f8f8f6;z-index:9999;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:16px;border:1px solid rgba(0,0,0,0.1);padding:40px 36px;width:100%;max-width:380px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
     <div style="font-size:28px;margin-bottom:12px">🔐</div>
     <div style="font-size:18px;font-weight:700;color:#1a1a1a;margin-bottom:6px">세무사 배정 시스템</div>
@@ -563,7 +563,11 @@ function makeOpt(val, label, type) {
   const div = document.createElement("div");
   div.className = "custom-opt";
   div.textContent = label;
-  div.onmousedown = e => { e.preventDefault(); selectRegionOpt(val, label); };
+  if (type === "district") {
+    div.onmousedown = e => { e.preventDefault(); selectDistrictOpt(val, label); };
+  } else {
+    div.onmousedown = e => { e.preventDefault(); selectRegionOpt(val, label); };
+  }
   return div;
 }
 
@@ -618,10 +622,7 @@ function filterDistrictOptions(q) {
   all.onmousedown = e => { e.preventDefault(); selectDistrictOpt("", "전체"); };
   drop.appendChild(all);
   filtered.forEach(d => {
-    const div = document.createElement("div");
-    div.className = "custom-opt";
-    div.textContent = d;
-    div.onmousedown = ev => { ev.preventDefault(); selectDistrictOpt(d, d); };
+    const div = makeOpt(d, d, "district");
     drop.appendChild(div);
   });
   drop.style.display = "block";
@@ -676,15 +677,20 @@ document.addEventListener("click", e => {
 });
 
 // ── 관리자 ───────────────────────────────────────────────
-function toggleAdmin() {
+const ADMIN_HASH = "7f135c65327bdaffdf1167e54e380e9008fb87a3da9919401bb76b77a3d20287";
+
+async function toggleAdmin() {
   if (adminOpen) {
     adminOpen = false;
     $("adminPanel").classList.remove("open");
     return;
   }
   const pw = prompt("관리자 비밀번호를 입력하세요.");
-  if (pw === null) return; // 취소
-  if (pw !== "unitblack") {
+  if (pw === null) return;
+  const hashHex = Array.from(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pw)))
+  ).map(b => b.toString(16).padStart(2, "0")).join("");
+  if (hashHex !== ADMIN_HASH) {
     alert("비밀번호가 올바르지 않습니다.");
     return;
   }
@@ -732,16 +738,8 @@ async function manualRefresh() {
   if ($("tab-dashboard")?.classList.contains("active")) renderDashboard();
 
   // 버튼 복구
-  ["refreshBtn","dashRefreshBtn"].forEach(id => {
-    const btn = $(id);
-    if (btn) { btn.textContent = "✅ 완료"; btn.disabled = false; }
-  });
-  setTimeout(() => {
-    ["refreshBtn","dashRefreshBtn"].forEach(id => {
-      const btn = $(id);
-      if (btn) btn.textContent = "🔄 새로고침";
-    });
-  }, 2000);
+  setRefreshBtns("✅ 완료", false);
+  setTimeout(() => setRefreshBtns("🔄 새로고침", false), 2000);
 }
 
 async function loadData() {
@@ -1314,6 +1312,43 @@ function doSearch() {
 }
 
 // ── 렌더링 ───────────────────────────────────────────────
+
+/**
+ * 배정 비율 경고 HTML을 반환한다.
+ * 개인 70% : 법인 30% 기준. 세무사가 의도적으로 한쪽을 0으로 설정한 경우 경고 제외.
+ * @param {object} t    - TAX_DATA 항목
+ * @param {number} usedInd  - 현재 개인 계약 수
+ * @param {number} usedCorp - 현재 법인 계약 수
+ * @param {"small"|"normal"} size - "small"이면 대시보드 카드용 compact 스타일
+ * @returns {string} HTML 문자열 (경고 없으면 "")
+ */
+function calcRatioWarning(t, usedInd, usedCorp, size = "normal") {
+  const totalUsed = usedInd + usedCorp;
+  if (totalUsed < 2) return "";
+
+  const corpRatio = usedCorp / totalUsed;
+  const indRatio  = usedInd  / totalUsed;
+  const maxTotal  = (t.individual || 0) + (t.corporate || 0);
+  const wantedCorpR = maxTotal > 0 ? (t.corporate  || 0) / maxTotal : null;
+  const wantedIndR  = maxTotal > 0 ? (t.individual || 0) / maxTotal : null;
+  const wantsCorp   = t.corporate  > 0 && (wantedCorpR === null || wantedCorpR >= 0.3);
+  const wantsInd    = t.individual > 0 && (wantedIndR  === null || wantedIndR  >= 0.3);
+
+  if (size === "small") {
+    if (corpRatio < 0.3 && wantsCorp)
+      return `<div style="margin-top:6px;font-size:10px;color:var(--warn);font-weight:600;">⚠️ 법인 비중 낮음 (${Math.round(corpRatio*100)}%) — 법인 배정 권장</div>`;
+    if (indRatio < 0.3 && wantsInd)
+      return `<div style="margin-top:6px;font-size:10px;color:#185FA5;font-weight:600;">ℹ️ 개인 비중 낮음 (${Math.round(indRatio*100)}%) — 개인 배정 권장</div>`;
+  } else {
+    const pct = `<span style="font-size:11px;margin-left:6px;opacity:0.8">(개인 ${Math.round(indRatio*100)}% : 법인 ${Math.round(corpRatio*100)}%)</span>`;
+    if (corpRatio < 0.3 && wantsCorp)
+      return `<div class="match-box" style="background:var(--warn-light);color:var(--warn);margin-top:8px;">⚠️ 법인사업자 배정 비중 낮음 — 법인 배정을 권장합니다.${pct}</div>`;
+    if (indRatio < 0.3 && wantsInd)
+      return `<div class="match-box" style="background:#EEF3FF;color:#185FA5;margin-top:8px;">ℹ️ 개인사업자 배정 비중 낮음 — 개인 배정을 권장합니다.${pct}</div>`;
+  }
+  return "";
+}
+
 function getRemaining(t) {
   // 1차: 정확히 일치 (O(1))
   const keys = [t.branch, t.firm, t.name].filter(Boolean);
@@ -1430,32 +1465,6 @@ function renderResults(list, q) {
     const { usedInd, usedCorp } = rem;
     const totalUsed = usedInd + usedCorp;
 
-    // 배정 비율 경고 (기준: 개인 70% : 법인 30%)
-    // 단, 세무사가 해당 유형 수임을 0으로 설정한 경우 경고 제외 (의도적 설정)
-    let ratioWarning = "";
-    if (totalUsed >= 2) {
-      const corpRatio   = usedCorp / totalUsed;
-      const indRatio    = usedInd  / totalUsed;
-      // 세무사가 설정한 희망 비율 계산
-      const maxTotal    = (t.individual || 0) + (t.corporate || 0);
-      const wantedCorpR = maxTotal > 0 ? (t.corporate  || 0) / maxTotal : null;
-      const wantedIndR  = maxTotal > 0 ? (t.individual || 0) / maxTotal : null;
-      // 세무사가 희망한 비율 자체가 30% 미만이면 의도적 설정 → 경고 제외
-      const wantsCorp   = t.corporate  > 0 && (wantedCorpR === null || wantedCorpR >= 0.3);
-      const wantsInd    = t.individual > 0 && (wantedIndR  === null || wantedIndR  >= 0.3);
-      if (corpRatio < 0.3 && wantsCorp) {
-        ratioWarning = `<div class="match-box" style="background:var(--warn-light);color:var(--warn);margin-top:8px;">
-          ⚠️ 법인사업자 배정 비중 낮음 — 법인 배정을 권장합니다.
-          <span style="font-size:11px;margin-left:6px;opacity:0.8">(개인 ${Math.round(indRatio*100)}% : 법인 ${Math.round(corpRatio*100)}%)</span>
-        </div>`;
-      } else if (indRatio < 0.3 && wantsInd) {
-        ratioWarning = `<div class="match-box" style="background:#EEF3FF;color:#185FA5;margin-top:8px;">
-          ℹ️ 개인사업자 배정 비중 낮음 — 개인 배정을 권장합니다.
-          <span style="font-size:11px;margin-left:6px;opacity:0.8">(개인 ${Math.round(indRatio*100)}% : 법인 ${Math.round(corpRatio*100)}%)</span>
-        </div>`;
-      }
-    }
-
     html += `<div class="card-info">`;
     if (t.address) html += `<div class="card-info-row"><span>📍</span><span>${t.address}</span></div>`;
     if (t.phone && t.phone !== "-") html += `<div class="card-info-row"><span>📞</span><span>${t.phone.split("\n")[0]}</span></div>`;
@@ -1482,7 +1491,7 @@ function renderResults(list, q) {
     }
     html += `</div>`;
     // 배정 비율 경고
-    html += ratioWarning;
+    html += calcRatioWarning(t, usedInd, usedCorp, "normal");
     // 업종 매칭 정보 표시 (A섹션 및 C섹션 중 매칭된 것)
     if (t.industryMatched && t.industries_ok) {
       const prev = t.industries_ok.slice(0,120)+(t.industries_ok.length>120?"…":"");
@@ -1601,8 +1610,6 @@ function renderDailyTab() {
       </div>`;
     })() : "";
 
-    const indFull  = false;
-    const corpFull = false;
     const cardBorder = warn
       ? "border:1.5px solid var(--warn);background:var(--warn-light);"
       : "border:1px solid var(--border);";
@@ -1802,11 +1809,7 @@ function scheduleAutoRefresh() {
   setInterval(() => {
     const h = new Date().getHours();
     if (h >= 9 && h < 19) {
-      loadData();
-      // 배정현황 탭이 열려있으면 대시보드도 갱신
-      if ($("tab-dashboard")?.classList.contains("active")) {
-        renderDashboard();
-      }
+      loadData(); // loadAirtable 내부에서 배정현황 탭이 열려 있으면 renderDashboard 호출됨
     }
   }, 30 * 60 * 1000); // 30분 간격
 }
@@ -2032,28 +2035,8 @@ function makeDashCard(t, status) {
     </div>`;
   }
 
-  // 배정 비율 경고 (기준: 개인 70% : 법인 30%)
-  // 세무사가 해당 유형을 0으로 설정한 경우 경고 제외 (의도적 설정)
-  const totalUsed = usedInd + usedCorp;
-  let ratioRow = "";
-  if (totalUsed >= 2) {
-    const corpRatio  = usedCorp / totalUsed;
-    const indRatio   = usedInd  / totalUsed;
-    const maxTotal   = (t.individual || 0) + (t.corporate || 0);
-    const wantedCorpR = maxTotal > 0 ? (t.corporate  || 0) / maxTotal : null;
-    const wantedIndR  = maxTotal > 0 ? (t.individual || 0) / maxTotal : null;
-    const wantsCorp  = t.corporate  > 0 && (wantedCorpR === null || wantedCorpR >= 0.3);
-    const wantsInd   = t.individual > 0 && (wantedIndR  === null || wantedIndR  >= 0.3);
-    if (corpRatio < 0.3 && wantsCorp) {
-      ratioRow = `<div style="margin-top:6px;font-size:10px;color:var(--warn);font-weight:600;">
-        ⚠️ 법인 비중 낮음 (${Math.round(corpRatio*100)}%) — 법인 배정 권장
-      </div>`;
-    } else if (indRatio < 0.3 && wantsInd) {
-      ratioRow = `<div style="margin-top:6px;font-size:10px;color:#185FA5;font-weight:600;">
-        ℹ️ 개인 비중 낮음 (${Math.round(indRatio*100)}%) — 개인 배정 권장
-      </div>`;
-    }
-  }
+  // 배정 비율 경고
+  const ratioRow = calcRatioWarning(t, usedInd, usedCorp, "small");
 
   return `<div class="dash-card" style="${cardBorder}">
     <div class="dash-name">${formatName(t)}${srBadge}</div>
@@ -2154,6 +2137,11 @@ function runTests() {
   test("비밀번호 해시 방식 사용", () => {
     return typeof LOCK_HASH !== "undefined" && typeof LOCK_PW === "undefined"
       ? true : "LOCK_PW 평문 노출 — 해시 방식으로 변경 필요";
+  });
+
+  test("관리자 비밀번호 해시 방식 사용", () => {
+    return typeof ADMIN_HASH !== "undefined"
+      ? true : "ADMIN_HASH 없음 — toggleAdmin 확인 필요";
   });
 
   // ── 결과 요약 ───────────────────────────────────────────
