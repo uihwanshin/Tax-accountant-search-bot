@@ -205,7 +205,7 @@
   .dash-row{display:flex;align-items:center;justify-content:space-between;font-size:13px;padding:3px 0;}
   .dash-label{color:var(--text-sub);}
   .dash-count{font-weight:700;}
-  .dash-count.ok{color:var(--primary);}
+  .dash-count.ok{color:var(--text);}
   .dash-count.full{color:var(--danger);}
   .dash-badge{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:700;margin-top:8px;display:inline-block;}
   .dash-badge.ok{background:var(--primary-light);color:var(--primary);}
@@ -2007,7 +2007,7 @@ function makeDashCard(t, status) {
     rows += `<div class="dash-row">
       <span class="dash-label">개인사업자</span>
       <span class="dash-count ${cls}">${maxInd} / ${usedInd}
-        <span style="font-size:10px;font-weight:400;color:${indFull?"var(--danger)":"var(--primary)"}"> (잔여 ${rem})</span>
+        <span style="font-size:10px;font-weight:400;color:${indFull?"var(--danger)":"var(--text)"}"> (잔여 ${rem})</span>
       </span>
     </div>`;
   }
@@ -2017,7 +2017,7 @@ function makeDashCard(t, status) {
     rows += `<div class="dash-row">
       <span class="dash-label">법인사업자</span>
       <span class="dash-count ${cls}">${maxCorp} / ${usedCorp}
-        <span style="font-size:10px;font-weight:400;color:${corpFull?"var(--danger)":"var(--primary)"}"> (잔여 ${rem})</span>
+        <span style="font-size:10px;font-weight:400;color:${corpFull?"var(--danger)":"var(--text)"}"> (잔여 ${rem})</span>
       </span>
     </div>`;
   }
