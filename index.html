@@ -555,6 +555,21 @@ function addBusinessDays(dateStr, n) {
   }
   return d.toISOString().slice(0,10);
 }
+
+/** 두 날짜 사이 영업일 수를 반환 (시작일 포함 안 함, 종료일 포함) */
+function countBusinessDays(fromStr, toStr) {
+  const from = new Date(fromStr);
+  const to   = new Date(toStr);
+  if (to <= from) return 0;
+  let count = 0;
+  const d = new Date(from);
+  d.setDate(d.getDate() + 1);
+  while (d <= to) {
+    if (isBusinessDay(d.toISOString().slice(0,10))) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
+}
 const REFRESH_BTN_IDS = ["refreshBtn","dashRefreshBtn","dailyRefreshBtn"];
 let TAX_DATA        = [];
 let CONTRACT_MAP    = {}; // { "지점명": { individual: N, corporate: N } }
@@ -861,7 +876,10 @@ async function loadAssign() {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
-    ASSIGN_RECORDS  = data.assignRecords  || [];
+    ASSIGN_RECORDS  = (data.assignRecords || []).map(r => ({
+      ...r,
+      days: countBusinessDays(r.assignDate, r.contractDate),
+    }));
     PENDING_RECORDS = data.pendingRecords || [];
     localStorage.setItem(LS_ASSIGN, JSON.stringify({ assignRecords: ASSIGN_RECORDS, pendingRecords: PENDING_RECORDS, updatedAt: data.updatedAt || new Date().toISOString() }));
     if ($("tab-assign")?.classList.contains("active")) renderAssignTab();
@@ -870,7 +888,10 @@ async function loadAssign() {
     const cached = localStorage.getItem(LS_ASSIGN);
     if (cached) {
       const p = JSON.parse(cached);
-      ASSIGN_RECORDS  = p.assignRecords  || [];
+      ASSIGN_RECORDS  = (p.assignRecords || []).map(r => ({
+        ...r,
+        days: countBusinessDays(r.assignDate, r.contractDate),
+      }));
       PENDING_RECORDS = p.pendingRecords || [];
     }
   }
