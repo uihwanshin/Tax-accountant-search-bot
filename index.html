@@ -2079,33 +2079,43 @@ function renderPendingSection() {
     $("assignChart").after(el);
   }
 
-  if (!PENDING_RECORDS.length) {
+  // ── 현재 선택된 년도/월 필터 적용 ──
+  const filtered = PENDING_RECORDS.filter(r => {
+    const yearMatch  = assignYear  === "전체" || r.month.startsWith(assignYear);
+    const monthMatch = assignMonth === "전체" || r.month.slice(5,7) === assignMonth;
+    return yearMatch && monthMatch;
+  });
+
+  if (!filtered.length) {
     el.innerHTML = "";
     return;
   }
 
   const today = new Date().toISOString().slice(0,10);
 
-  // ── 1. 3영업일 초과 미계약 (배정일 기준) ──
-  const overdue = PENDING_RECORDS.filter(r => {
+  // ── 1. 3영업일 초과 미계약 ──
+  const overdue = filtered.filter(r => {
     const deadline = addBusinessDays(r.assignDate, 3);
     return today > deadline;
   });
 
-  // 담당자별 집계
   const overdueByAssignee = {};
   overdue.forEach(r => {
     overdueByAssignee[r.assignee] = (overdueByAssignee[r.assignee] || 0) + 1;
   });
 
-  // ── 2. 이번 달 배정 미계약 건수 (월 기준) ──
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
-  const thisMonthPending = PENDING_RECORDS.filter(r => r.month === currentMonth);
+  // ── 2. 필터 기간 내 미계약 건수 ──
   const thisMonthByAssignee = {};
-  thisMonthPending.forEach(r => {
+  filtered.forEach(r => {
     thisMonthByAssignee[r.assignee] = (thisMonthByAssignee[r.assignee] || 0) + 1;
   });
+
+  // 기간 라벨
+  const periodLabel = assignYear === "전체" && assignMonth === "전체"
+    ? "전체 기간"
+    : assignYear !== "전체" && assignMonth !== "전체"
+      ? `${assignYear}년 ${assignMonth}월`
+      : assignYear !== "전체" ? `${assignYear}년` : `${assignMonth}월`;
 
   // ── 렌더링 ──
   const allAssignees = Array.from(new Set([
@@ -2114,8 +2124,8 @@ function renderPendingSection() {
   ])).sort();
 
   const rows = allAssignees.map(name => {
-    const o = overdueByAssignee[name]    || 0;
-    const t = thisMonthByAssignee[name]  || 0;
+    const o = overdueByAssignee[name]   || 0;
+    const t = thisMonthByAssignee[name] || 0;
     return `
       <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);">
         <div style="flex:1;font-size:13px;font-weight:600;color:var(--text)">${name}</div>
@@ -2123,19 +2133,19 @@ function renderPendingSection() {
           3영업일 초과: <strong style="color:${o > 0 ? "var(--danger)" : "var(--text)"}">${o}건</strong>
         </div>
         <div style="font-size:12px;color:var(--text-sub);min-width:120px;">
-          이번 달 미계약: <strong style="color:var(--text)">${t}건</strong>
+          미계약: <strong style="color:var(--text)">${t}건</strong>
         </div>
       </div>`;
   }).join("");
 
   el.innerHTML = `
     <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px;padding-top:8px;border-top:2px solid var(--border);">
-      ⚠️ 미계약 현황 <span style="font-size:11px;font-weight:400;color:var(--text-sub)">(TBM_1 · 영업대행 · 배정 후 미계약)</span>
+      ⚠️ 미계약 현황 <span style="font-size:11px;font-weight:400;color:var(--text-sub)">(TBM_1 · 영업대행/세이브택스 · ${periodLabel})</span>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:12px;font-size:11px;color:var(--text-sub);">
       <span>3영업일 초과: 배정일 기준 오늘까지 미계약</span>
       <span>·</span>
-      <span>이번 달 미계약: ${currentMonth} 배정 건 중 미계약 상태</span>
+      <span>미계약: ${periodLabel} 배정 건 중 미계약 상태</span>
     </div>
     ${rows || '<div class="empty-state">미계약 현황이 없습니다.</div>'}`;
 }
