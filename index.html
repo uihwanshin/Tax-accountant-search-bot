@@ -497,7 +497,7 @@ const formatDateTime = dt => `${dt.getFullYear()}.${String(dt.getMonth()+1).padS
 
 /** CONTRACT_MAP 역방향 조회 인덱스 (O(1) 조회용) */
 let _contractIndex = new Map();
-let ASSIGN_STATS = {}; // { 전체: {...}, 담당자A: {...}, ... }
+let ASSIGN_RECORDS = []; // [{ assignee, month, days }, ...]
 function buildContractIndex() {
   _contractIndex = new Map();
   for (const ck of Object.keys(CONTRACT_MAP)) {
@@ -802,9 +802,9 @@ async function loadAirtable() {
 
     CONTRACT_MAP   = data.map   || {};
     CONTRACT_DATES = data.dates || {};
-    ASSIGN_STATS   = data.assignStats || {};
+    ASSIGN_RECORDS = data.assignRecords || [];
     buildContractIndex();
-    localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, dates: CONTRACT_DATES, assignStats: ASSIGN_STATS, updatedAt: data.updatedAt || new Date().toISOString() }));
+    localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, dates: CONTRACT_DATES, assignRecords: ASSIGN_RECORDS, updatedAt: data.updatedAt || new Date().toISOString() }));
     updateStatusBar();
     if ($("tab-dashboard")?.classList.contains("active")) renderDashboard();
 
@@ -815,7 +815,7 @@ async function loadAirtable() {
       const p = JSON.parse(cached);
       CONTRACT_MAP   = p.map   || {};
       CONTRACT_DATES = p.dates || {};
-      ASSIGN_STATS   = p.assignStats || {};
+      ASSIGN_RECORDS = p.assignRecords || {};
       buildContractIndex();
     }
     updateStatusBar();
@@ -1870,33 +1870,74 @@ function isFullyBooked(t) { return getBookingStatus(t) === "full"; }
 // ── 배정 현황 렌더링 ──────────────────────────────────────
 // ── 계약 소요일 탭 ───────────────────────────────────────
 let assignFilter = "전체";
+let assignMonth  = "전체";
+
+function summarizeDays(days) {
+  const count = days.length;
+  if (count === 0) return null;
+  const avg    = Math.round((days.reduce((a, b) => a + b, 0) / count) * 10) / 10;
+  const sorted = [...days].sort((a, b) => a - b);
+  const median = count % 2 === 1
+    ? sorted[Math.floor(count / 2)]
+    : (sorted[count / 2 - 1] + sorted[count / 2]) / 2;
+  const distribution = {};
+  days.forEach(d => { distribution[d] = (distribution[d] || 0) + 1; });
+  return { avg, median, distribution, count };
+}
 
 function renderAssignTab() {
   const filterEl = $("assignFilterBtns");
   const statsEl  = $("assignStats");
   const chartEl  = $("assignChart");
 
-  if (!Object.keys(ASSIGN_STATS).length) {
-    statsEl.innerHTML = `<div class="empty-state">데이터가 없습니다. 새로고침을 눌러주세요.</div>`;
+  if (!ASSIGN_RECORDS.length) {
     filterEl.innerHTML = "";
+    statsEl.innerHTML  = `<div class="empty-state">데이터가 없습니다. 새로고침을 눌러주세요.</div>`;
     chartEl.innerHTML  = "";
     return;
   }
 
-  // ── 담당자 필터 버튼 ──
-  const names = ["전체", ...Object.keys(ASSIGN_STATS).filter(k => k !== "전체").sort()];
+  // 월 목록 추출 (정렬)
+  const months = ["전체", ...Array.from(new Set(ASSIGN_RECORDS.map(r => r.month))).sort()];
+  // 담당자 목록 추출 (정렬)
+  const assignees = ["전체", ...Array.from(new Set(ASSIGN_RECORDS.map(r => r.assignee))).sort()];
+
+  // ── 필터 버튼 (담당자 + 월) ──
   filterEl.innerHTML = "";
-  names.forEach(name => {
+
+  const assigneeRow = document.createElement("div");
+  assigneeRow.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;";
+  assignees.forEach(name => {
     const btn = document.createElement("button");
     btn.className = "dash-filter-btn" + (name === assignFilter ? " active" : "");
     btn.textContent = name;
     btn.onclick = () => { assignFilter = name; renderAssignTab(); };
-    filterEl.appendChild(btn);
+    assigneeRow.appendChild(btn);
   });
 
-  const s = ASSIGN_STATS[assignFilter];
-  if (!s || s.count === 0) {
-    statsEl.innerHTML = `<div class="empty-state">해당 담당자의 데이터가 없습니다.</div>`;
+  const monthRow = document.createElement("div");
+  monthRow.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;";
+  months.forEach(m => {
+    const btn = document.createElement("button");
+    btn.className = "dash-filter-btn" + (m === assignMonth ? " active" : "");
+    btn.textContent = m;
+    btn.style.fontSize = "11px";
+    btn.onclick = () => { assignMonth = m; renderAssignTab(); };
+    monthRow.appendChild(btn);
+  });
+
+  filterEl.appendChild(assigneeRow);
+  filterEl.appendChild(monthRow);
+
+  // ── 필터 적용 후 집계 ──
+  const filtered = ASSIGN_RECORDS.filter(r =>
+    (assignFilter === "전체" || r.assignee === assignFilter) &&
+    (assignMonth  === "전체" || r.month    === assignMonth)
+  );
+  const s = summarizeDays(filtered.map(r => r.days));
+
+  if (!s) {
+    statsEl.innerHTML = `<div class="empty-state">해당 조건의 데이터가 없습니다.</div>`;
     chartEl.innerHTML = "";
     return;
   }
@@ -1919,13 +1960,13 @@ function renderAssignTab() {
     </div>`;
 
   // ── 막대 차트 ──
-  const dist = s.distribution;
-  const days = Object.keys(dist).map(Number).sort((a, b) => a - b);
+  const dist   = s.distribution;
+  const days   = Object.keys(dist).map(Number).sort((a, b) => a - b);
   const maxVal = Math.max(...Object.values(dist));
-  const BAR_MAX_HEIGHT = 160; // px
+  const BAR_MAX_HEIGHT = 160;
 
   const bars = days.map(d => {
-    const count = dist[d];
+    const count  = dist[d];
     const height = Math.round((count / maxVal) * BAR_MAX_HEIGHT);
     return `
       <div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:36px;">
