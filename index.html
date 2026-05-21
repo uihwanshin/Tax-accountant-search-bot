@@ -2179,7 +2179,7 @@ function makeDashCard(t, status) {
     const rem = Math.max(0, maxInd - usedInd);
     rows += `<div class="dash-row">
       <span class="dash-label">개인사업자</span>
-      <span class="dash-count ${cls}">${maxInd} / ${usedInd}
+      <span class="dash-count ${cls}">${usedInd} / ${maxInd}
         <span style="font-size:10px;font-weight:400;color:${indFull?"var(--danger)":"var(--text)"}"> (잔여 ${rem})</span>
       </span>
     </div>`;
@@ -2189,7 +2189,7 @@ function makeDashCard(t, status) {
     const rem = Math.max(0, maxCorp - usedCorp);
     rows += `<div class="dash-row">
       <span class="dash-label">법인사업자</span>
-      <span class="dash-count ${cls}">${maxCorp} / ${usedCorp}
+      <span class="dash-count ${cls}">${usedCorp} / ${maxCorp}
         <span style="font-size:10px;font-weight:400;color:${corpFull?"var(--danger)":"var(--text)"}"> (잔여 ${rem})</span>
       </span>
     </div>`;
