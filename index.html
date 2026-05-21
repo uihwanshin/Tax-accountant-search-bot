@@ -178,7 +178,7 @@
 
   /* 배정현황 필터 */
   .dash-filter-btn{
-    padding:6px 14px;font-size:12px;font-weight:500;font-family:'Noto Sans KR',sans-serif;
+    height:32px;padding:0 14px;font-size:12px;font-weight:500;font-family:'Noto Sans KR',sans-serif;
     border:1.5px solid var(--border-strong);border-radius:20px;
     background:var(--bg);color:var(--text-sub);cursor:pointer;transition:all 0.15s;
   }
@@ -1975,21 +1975,16 @@ function renderAssignTab() {
 
   // ── 필터 UI ──
   filterEl.innerHTML = `
-    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;gap:6px;">
-        <label style="font-size:12px;color:var(--text-sub);white-space:nowrap;">년도</label>
-        <select id="assignYearSel" style="font-size:13px;padding:5px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);">
-          ${years.map(y => `<option value="${y}" ${y === assignYear ? "selected" : ""}>${y === "전체" ? "전체" : y + "년"}</option>`).join("")}
-        </select>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <label style="font-size:12px;color:var(--text-sub);white-space:nowrap;">월</label>
-        <select id="assignMonthSel" style="font-size:13px;padding:5px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);">
-          ${monthOptions.map(m => `<option value="${m}" ${m === assignMonth ? "selected" : ""}>${m === "전체" ? "전체" : m + "월"}</option>`).join("")}
-        </select>
-      </div>
-    </div>
-    <div id="assigneeBtns" style="display:flex;flex-wrap:wrap;gap:8px;"></div>`;
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
+      <select id="assignYearSel" style="height:32px;font-size:13px;padding:0 10px;border:1px solid var(--border);border-radius:20px;background:#fff;color:var(--text);cursor:pointer;">
+        ${years.map(y => `<option value="${y}" ${y === assignYear ? "selected" : ""}>${y === "전체" ? "년도 전체" : y + "년"}</option>`).join("")}
+      </select>
+      <select id="assignMonthSel" style="height:32px;font-size:13px;padding:0 10px;border:1px solid var(--border);border-radius:20px;background:#fff;color:var(--text);cursor:pointer;">
+        ${monthOptions.map(m => `<option value="${m}" ${m === assignMonth ? "selected" : ""}>${m === "전체" ? "월 전체" : m + "월"}</option>`).join("")}
+      </select>
+      <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
+      <div id="assigneeBtns" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+    </div>`;
 
   $("assignYearSel").onchange = e => {
     assignYear  = e.target.value;
