@@ -1870,6 +1870,7 @@ function isFullyBooked(t) { return getBookingStatus(t) === "full"; }
 // ── 배정 현황 렌더링 ──────────────────────────────────────
 // ── 계약 소요일 탭 ───────────────────────────────────────
 let assignFilter = "전체";
+let assignYear   = "전체";
 let assignMonth  = "전체";
 
 function summarizeDays(days) {
@@ -1897,43 +1898,60 @@ function renderAssignTab() {
     return;
   }
 
-  // 월 목록 추출 (정렬)
-  const months = ["전체", ...Array.from(new Set(ASSIGN_RECORDS.map(r => r.month))).sort()];
-  // 담당자 목록 추출 (정렬)
+  // 년도/월 목록 추출
+  const years = ["전체", ...Array.from(new Set(ASSIGN_RECORDS.map(r => r.month.slice(0,4)))).sort()];
+  const monthsForYear = assignYear === "전체"
+    ? Array.from(new Set(ASSIGN_RECORDS.map(r => r.month.slice(5,7)))).sort()
+    : Array.from(new Set(ASSIGN_RECORDS.filter(r => r.month.startsWith(assignYear)).map(r => r.month.slice(5,7)))).sort();
+  const monthOptions = ["전체", ...monthsForYear];
+
+  // 담당자 목록
   const assignees = ["전체", ...Array.from(new Set(ASSIGN_RECORDS.map(r => r.assignee))).sort()];
 
-  // ── 필터 버튼 (담당자 + 월) ──
-  filterEl.innerHTML = "";
+  // ── 필터 UI ──
+  filterEl.innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <label style="font-size:12px;color:var(--text-sub);white-space:nowrap;">년도</label>
+        <select id="assignYearSel" style="font-size:13px;padding:5px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);">
+          ${years.map(y => `<option value="${y}" ${y === assignYear ? "selected" : ""}>${y === "전체" ? "전체" : y + "년"}</option>`).join("")}
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <label style="font-size:12px;color:var(--text-sub);white-space:nowrap;">월</label>
+        <select id="assignMonthSel" style="font-size:13px;padding:5px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);">
+          ${monthOptions.map(m => `<option value="${m}" ${m === assignMonth ? "selected" : ""}>${m === "전체" ? "전체" : m + "월"}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    <div id="assigneeBtns" style="display:flex;flex-wrap:wrap;gap:8px;"></div>`;
 
-  const assigneeRow = document.createElement("div");
-  assigneeRow.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;";
+  $("assignYearSel").onchange = e => {
+    assignYear  = e.target.value;
+    assignMonth = "전체";
+    renderAssignTab();
+  };
+  $("assignMonthSel").onchange = e => {
+    assignMonth = e.target.value;
+    renderAssignTab();
+  };
+
+  const assigneeBtns = $("assigneeBtns");
   assignees.forEach(name => {
     const btn = document.createElement("button");
     btn.className = "dash-filter-btn" + (name === assignFilter ? " active" : "");
     btn.textContent = name;
     btn.onclick = () => { assignFilter = name; renderAssignTab(); };
-    assigneeRow.appendChild(btn);
+    assigneeBtns.appendChild(btn);
   });
-
-  const monthRow = document.createElement("div");
-  monthRow.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;";
-  months.forEach(m => {
-    const btn = document.createElement("button");
-    btn.className = "dash-filter-btn" + (m === assignMonth ? " active" : "");
-    btn.textContent = m;
-    btn.style.fontSize = "11px";
-    btn.onclick = () => { assignMonth = m; renderAssignTab(); };
-    monthRow.appendChild(btn);
-  });
-
-  filterEl.appendChild(assigneeRow);
-  filterEl.appendChild(monthRow);
 
   // ── 필터 적용 후 집계 ──
-  const filtered = ASSIGN_RECORDS.filter(r =>
-    (assignFilter === "전체" || r.assignee === assignFilter) &&
-    (assignMonth  === "전체" || r.month    === assignMonth)
-  );
+  const filtered = ASSIGN_RECORDS.filter(r => {
+    const yearMatch  = assignYear  === "전체" || r.month.startsWith(assignYear);
+    const monthMatch = assignMonth === "전체" || r.month.slice(5,7) === assignMonth;
+    const nameMatch  = assignFilter === "전체" || r.assignee === assignFilter;
+    return yearMatch && monthMatch && nameMatch;
+  });
   const s = summarizeDays(filtered.map(r => r.days));
 
   if (!s) {
