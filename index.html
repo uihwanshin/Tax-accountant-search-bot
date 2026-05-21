@@ -273,6 +273,7 @@
     <button class="tab-btn" onclick="switchTab('dashboard', this)">📊 배정 현황</button>
     <button class="tab-btn" onclick="switchTab('daily', this)">📅 일별 배정 현황</button>
     <button class="tab-btn" onclick="switchTab('lookup', this)">🔎 업체 이력 조회</button>
+    <button class="tab-btn" onclick="switchTab('assign', this)">⏱️ 계약 소요일</button>
   </div>
 
   <!-- 탭: 세무사 검색 -->
@@ -473,6 +474,16 @@
     <div id="lookupResults"></div>
   </div><!-- /tab-lookup -->
 
+  <div class="tab-content" id="tab-assign">
+    <div style="margin-bottom:16px;">
+      <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">⏱️ 계약 소요일 분석</div>
+      <div style="font-size:12px;color:var(--text-sub)">세무사 배정일 → 계약서 공유일까지 소요된 일수를 담당자별로 분석합니다. (TBM_1 유입 기준)</div>
+    </div>
+    <div id="assignFilterBtns" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;"></div>
+    <div id="assignStats" style="margin-bottom:20px;"></div>
+    <div id="assignChart"></div>
+  </div><!-- /tab-assign -->
+
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -486,6 +497,7 @@ const formatDateTime = dt => `${dt.getFullYear()}.${String(dt.getMonth()+1).padS
 
 /** CONTRACT_MAP 역방향 조회 인덱스 (O(1) 조회용) */
 let _contractIndex = new Map();
+let ASSIGN_STATS = {}; // { 전체: {...}, 담당자A: {...}, ... }
 function buildContractIndex() {
   _contractIndex = new Map();
   for (const ck of Object.keys(CONTRACT_MAP)) {
@@ -790,8 +802,9 @@ async function loadAirtable() {
 
     CONTRACT_MAP   = data.map   || {};
     CONTRACT_DATES = data.dates || {};
+    ASSIGN_STATS   = data.assignStats || {};
     buildContractIndex();
-    localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, dates: CONTRACT_DATES, updatedAt: data.updatedAt || new Date().toISOString() }));
+    localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, dates: CONTRACT_DATES, assignStats: ASSIGN_STATS, updatedAt: data.updatedAt || new Date().toISOString() }));
     updateStatusBar();
     if ($("tab-dashboard")?.classList.contains("active")) renderDashboard();
 
@@ -802,6 +815,7 @@ async function loadAirtable() {
       const p = JSON.parse(cached);
       CONTRACT_MAP   = p.map   || {};
       CONTRACT_DATES = p.dates || {};
+      ASSIGN_STATS   = p.assignStats || {};
       buildContractIndex();
     }
     updateStatusBar();
@@ -1822,6 +1836,7 @@ function switchTab(name, btn) {
     else renderDailyTab();
   }
   if (name === "lookup") $("lookupInput").focus();
+  if (name === "assign") renderAssignTab();
 }
 
 // ── 대시보드 필터 상태 ───────────────────────────────────
@@ -1853,6 +1868,80 @@ function getBookingStatus(t) {
 function isFullyBooked(t) { return getBookingStatus(t) === "full"; }
 
 // ── 배정 현황 렌더링 ──────────────────────────────────────
+// ── 계약 소요일 탭 ───────────────────────────────────────
+let assignFilter = "전체";
+
+function renderAssignTab() {
+  const filterEl = $("assignFilterBtns");
+  const statsEl  = $("assignStats");
+  const chartEl  = $("assignChart");
+
+  if (!Object.keys(ASSIGN_STATS).length) {
+    statsEl.innerHTML = `<div class="empty-state">데이터가 없습니다. 새로고침을 눌러주세요.</div>`;
+    filterEl.innerHTML = "";
+    chartEl.innerHTML  = "";
+    return;
+  }
+
+  // ── 담당자 필터 버튼 ──
+  const names = ["전체", ...Object.keys(ASSIGN_STATS).filter(k => k !== "전체").sort()];
+  filterEl.innerHTML = "";
+  names.forEach(name => {
+    const btn = document.createElement("button");
+    btn.className = "dash-filter-btn" + (name === assignFilter ? " active" : "");
+    btn.textContent = name;
+    btn.onclick = () => { assignFilter = name; renderAssignTab(); };
+    filterEl.appendChild(btn);
+  });
+
+  const s = ASSIGN_STATS[assignFilter];
+  if (!s || s.count === 0) {
+    statsEl.innerHTML = `<div class="empty-state">해당 담당자의 데이터가 없습니다.</div>`;
+    chartEl.innerHTML = "";
+    return;
+  }
+
+  // ── 평균 / 중위값 / 건수 ──
+  statsEl.innerHTML = `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;">
+      <div class="match-box" style="flex:1;min-width:120px;text-align:center;">
+        <div style="font-size:12px;color:var(--text-sub);margin-bottom:4px">총 건수</div>
+        <div style="font-size:22px;font-weight:700;color:var(--text)">${s.count}건</div>
+      </div>
+      <div class="match-box" style="flex:1;min-width:120px;text-align:center;">
+        <div style="font-size:12px;color:var(--text-sub);margin-bottom:4px">평균 소요일</div>
+        <div style="font-size:22px;font-weight:700;color:var(--primary)">${s.avg}일</div>
+      </div>
+      <div class="match-box" style="flex:1;min-width:120px;text-align:center;">
+        <div style="font-size:12px;color:var(--text-sub);margin-bottom:4px">중위값</div>
+        <div style="font-size:22px;font-weight:700;color:var(--primary)">${s.median}일</div>
+      </div>
+    </div>`;
+
+  // ── 막대 차트 ──
+  const dist = s.distribution;
+  const days = Object.keys(dist).map(Number).sort((a, b) => a - b);
+  const maxVal = Math.max(...Object.values(dist));
+  const BAR_MAX_HEIGHT = 160; // px
+
+  const bars = days.map(d => {
+    const count = dist[d];
+    const height = Math.round((count / maxVal) * BAR_MAX_HEIGHT);
+    return `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:36px;">
+        <div style="font-size:11px;font-weight:700;color:var(--text)">${count}</div>
+        <div style="width:28px;height:${height}px;background:var(--primary);border-radius:4px 4px 0 0;"></div>
+        <div style="font-size:11px;color:var(--text-sub)">${d}일</div>
+      </div>`;
+  }).join("");
+
+  chartEl.innerHTML = `
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">일자별 계약 건수 분포</div>
+    <div style="display:flex;align-items:flex-end;gap:6px;overflow-x:auto;padding-bottom:8px;border-bottom:1px solid var(--border);">
+      ${bars}
+    </div>`;
+}
+
 function renderDashboard() {
   const grid = $("dashGrid");
   const updEl = $("dashUpdated");
