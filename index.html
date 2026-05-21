@@ -1928,8 +1928,16 @@ function renderAssignTab() {
     : Array.from(new Set(ASSIGN_RECORDS.filter(r => r.month.startsWith(assignYear)).map(r => r.month.slice(5,7)))).sort();
   const monthOptions = ["전체", ...monthsForYear];
 
-  // 담당자 목록
-  const assignees = ["전체", ...Array.from(new Set(ASSIGN_RECORDS.map(r => r.assignee))).sort()];
+  // 현재 년도/월 필터 기준으로 건수 계산 후 5건 이상 담당자만 표시
+  const filteredByDate = ASSIGN_RECORDS.filter(r => {
+    const yearMatch  = assignYear  === "전체" || r.month.startsWith(assignYear);
+    const monthMatch = assignMonth === "전체" || r.month.slice(5,7) === assignMonth;
+    return yearMatch && monthMatch;
+  });
+  const assigneeCounts = {};
+  filteredByDate.forEach(r => { assigneeCounts[r.assignee] = (assigneeCounts[r.assignee] || 0) + 1; });
+  const assignees = ["전체", ...Object.keys(assigneeCounts).filter(k => assigneeCounts[k] >= 5).sort()];
+  if (!assignees.includes(assignFilter)) assignFilter = "전체";
 
   // ── 필터 UI ──
   filterEl.innerHTML = `
