@@ -482,6 +482,7 @@
     <div id="assignFilterBtns" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;"></div>
     <div id="assignStats" style="margin-bottom:20px;"></div>
     <div id="assignChart"></div>
+    <div id="assignPending" style="margin-top:28px;"></div>
   </div><!-- /tab-assign -->
 
 </main>
@@ -497,7 +498,8 @@ const formatDateTime = dt => `${dt.getFullYear()}.${String(dt.getMonth()+1).padS
 
 /** CONTRACT_MAP 역방향 조회 인덱스 (O(1) 조회용) */
 let _contractIndex = new Map();
-let ASSIGN_RECORDS = []; // [{ assignee, month, days }, ...]
+let ASSIGN_RECORDS  = []; // [{ assignee, month, days }, ...]
+let PENDING_RECORDS = []; // [{ assignee, assignDate, status, month }, ...]
 function buildContractIndex() {
   _contractIndex = new Map();
   for (const ck of Object.keys(CONTRACT_MAP)) {
@@ -524,6 +526,35 @@ const WORKER_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/airt
 const TAXDATA_URL     = "https://savetax-airtable-proxy.suh-204.workers.dev/taxdata";
 const SEARCH_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/search";
 const ASSIGN_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/assign";
+
+// ── 2026년 공휴일 ────────────────────────────────────────
+const HOLIDAYS_2026 = new Set([
+  "2026-01-01","2026-02-16","2026-02-17","2026-02-18",
+  "2026-03-01","2026-03-02","2026-05-01","2026-05-05",
+  "2026-05-24","2026-05-25","2026-06-03","2026-06-06",
+  "2026-07-17","2026-08-15","2026-08-17","2026-09-24",
+  "2026-09-25","2026-09-26","2026-10-03","2026-10-05",
+  "2026-10-09","2026-12-25",
+]);
+
+/** 날짜 문자열 "YYYY-MM-DD"가 영업일인지 확인 */
+function isBusinessDay(dateStr) {
+  const d = new Date(dateStr);
+  const dow = d.getDay(); // 0=일, 6=토
+  return dow !== 0 && dow !== 6 && !HOLIDAYS_2026.has(dateStr);
+}
+
+/** 기준일로부터 n 영업일 후 날짜를 "YYYY-MM-DD"로 반환 */
+function addBusinessDays(dateStr, n) {
+  const d = new Date(dateStr);
+  let count = 0;
+  while (count < n) {
+    d.setDate(d.getDate() + 1);
+    const s = d.toISOString().slice(0,10);
+    if (isBusinessDay(s)) count++;
+  }
+  return d.toISOString().slice(0,10);
+}
 const REFRESH_BTN_IDS = ["refreshBtn","dashRefreshBtn","dailyRefreshBtn"];
 let TAX_DATA        = [];
 let CONTRACT_MAP    = {}; // { "지점명": { individual: N, corporate: N } }
@@ -830,14 +861,17 @@ async function loadAssign() {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
-    ASSIGN_RECORDS = data.assignRecords || [];
-    localStorage.setItem(LS_ASSIGN, JSON.stringify({ assignRecords: ASSIGN_RECORDS, updatedAt: data.updatedAt || new Date().toISOString() }));
+    ASSIGN_RECORDS  = data.assignRecords  || [];
+    PENDING_RECORDS = data.pendingRecords || [];
+    localStorage.setItem(LS_ASSIGN, JSON.stringify({ assignRecords: ASSIGN_RECORDS, pendingRecords: PENDING_RECORDS, updatedAt: data.updatedAt || new Date().toISOString() }));
     if ($("tab-assign")?.classList.contains("active")) renderAssignTab();
 
   } catch(e) {
     const cached = localStorage.getItem(LS_ASSIGN);
     if (cached) {
-      ASSIGN_RECORDS = JSON.parse(cached).assignRecords || [];
+      const p = JSON.parse(cached);
+      ASSIGN_RECORDS  = p.assignRecords  || [];
+      PENDING_RECORDS = p.pendingRecords || [];
     }
   }
 }
@@ -2030,6 +2064,80 @@ function renderAssignTab() {
     <div style="display:flex;align-items:flex-end;gap:6px;overflow-x:auto;padding-bottom:8px;border-bottom:1px solid var(--border);">
       ${bars}
     </div>`;
+
+  // ── 미계약 현황 ──
+  renderPendingSection();
+}
+
+// ── 미계약 현황 섹션 ─────────────────────────────────────
+function renderPendingSection() {
+  let el = $("assignPending");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "assignPending";
+    el.style.marginTop = "28px";
+    $("assignChart").after(el);
+  }
+
+  if (!PENDING_RECORDS.length) {
+    el.innerHTML = "";
+    return;
+  }
+
+  const today = new Date().toISOString().slice(0,10);
+
+  // ── 1. 3영업일 초과 미계약 (배정일 기준) ──
+  const overdue = PENDING_RECORDS.filter(r => {
+    const deadline = addBusinessDays(r.assignDate, 3);
+    return today > deadline;
+  });
+
+  // 담당자별 집계
+  const overdueByAssignee = {};
+  overdue.forEach(r => {
+    overdueByAssignee[r.assignee] = (overdueByAssignee[r.assignee] || 0) + 1;
+  });
+
+  // ── 2. 이번 달 배정 미계약 건수 (월 기준) ──
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  const thisMonthPending = PENDING_RECORDS.filter(r => r.month === currentMonth);
+  const thisMonthByAssignee = {};
+  thisMonthPending.forEach(r => {
+    thisMonthByAssignee[r.assignee] = (thisMonthByAssignee[r.assignee] || 0) + 1;
+  });
+
+  // ── 렌더링 ──
+  const allAssignees = Array.from(new Set([
+    ...Object.keys(overdueByAssignee),
+    ...Object.keys(thisMonthByAssignee),
+  ])).sort();
+
+  const rows = allAssignees.map(name => {
+    const o = overdueByAssignee[name]    || 0;
+    const t = thisMonthByAssignee[name]  || 0;
+    return `
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);">
+        <div style="flex:1;font-size:13px;font-weight:600;color:var(--text)">${name}</div>
+        <div style="font-size:12px;color:var(--text-sub);min-width:120px;">
+          3영업일 초과: <strong style="color:${o > 0 ? "var(--danger)" : "var(--text)"}">${o}건</strong>
+        </div>
+        <div style="font-size:12px;color:var(--text-sub);min-width:120px;">
+          이번 달 미계약: <strong style="color:var(--text)">${t}건</strong>
+        </div>
+      </div>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px;padding-top:8px;border-top:2px solid var(--border);">
+      ⚠️ 미계약 현황 <span style="font-size:11px;font-weight:400;color:var(--text-sub)">(TBM_1 · 영업대행 · 배정 후 미계약)</span>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;font-size:11px;color:var(--text-sub);">
+      <span>3영업일 초과: 배정일 기준 오늘까지 미계약</span>
+      <span>·</span>
+      <span>이번 달 미계약: ${currentMonth} 배정 건 중 미계약 상태</span>
+    </div>
+    ${rows || '<div class="empty-state">미계약 현황이 없습니다.</div>'}`;
 }
 
 function renderDashboard() {
