@@ -519,9 +519,11 @@ Object.defineProperty(window, 'TODAY',  { get: () => getToday() });
 Object.defineProperty(window, 'LS_KEY', { get: () => LS_KEY_PREFIX  + getToday() });
 Object.defineProperty(window, 'LS_META',{ get: () => LS_META_PREFIX + getToday() });
 const LS_CONTRACT  = "semusa_contract_v1"; // Airtable는 실시간이라 날짜 무관
+const LS_ASSIGN    = "semusa_assign_v1";
 const WORKER_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/airtable";
 const TAXDATA_URL     = "https://savetax-airtable-proxy.suh-204.workers.dev/taxdata";
 const SEARCH_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/search";
+const ASSIGN_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/assign";
 const REFRESH_BTN_IDS = ["refreshBtn","dashRefreshBtn","dailyRefreshBtn"];
 let TAX_DATA        = [];
 let CONTRACT_MAP    = {}; // { "지점명": { individual: N, corporate: N } }
@@ -758,8 +760,9 @@ async function manualRefresh() {
 
 async function loadData() {
   setStatus('<span class="spinner"></span>데이터 불러오는 중...');
-  // 세무사 정보(Airtable) + 계약 현황(Airtable) 병렬 로드
+  // 세무사 정보 + 계약 현황 병렬 로드, 소요일은 독립적으로 별도 로드
   await Promise.all([loadTaxData(), loadAirtable()]);
+  loadAssign(); // 응답 느림 — await 없이 백그라운드 로드
 }
 
 // ── 세무사 정보 로드 (Airtable /taxdata) ────────────────
@@ -802,23 +805,40 @@ async function loadAirtable() {
 
     CONTRACT_MAP   = data.map   || {};
     CONTRACT_DATES = data.dates || {};
-    ASSIGN_RECORDS = data.assignRecords || [];
     buildContractIndex();
-    localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, dates: CONTRACT_DATES, assignRecords: ASSIGN_RECORDS, updatedAt: data.updatedAt || new Date().toISOString() }));
+    localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, dates: CONTRACT_DATES, updatedAt: data.updatedAt || new Date().toISOString() }));
     updateStatusBar();
     if ($("tab-dashboard")?.classList.contains("active")) renderDashboard();
 
   } catch(e) {
-    // 실패 시 캐시 사용
     const cached = localStorage.getItem(LS_CONTRACT);
     if (cached) {
       const p = JSON.parse(cached);
       CONTRACT_MAP   = p.map   || {};
       CONTRACT_DATES = p.dates || {};
-      ASSIGN_RECORDS = p.assignRecords || {};
       buildContractIndex();
     }
     updateStatusBar();
+  }
+}
+
+// ── 소요일 분석 데이터 로드 ──────────────────────────────
+async function loadAssign() {
+  try {
+    const res = await fetch(ASSIGN_URL);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    ASSIGN_RECORDS = data.assignRecords || [];
+    localStorage.setItem(LS_ASSIGN, JSON.stringify({ assignRecords: ASSIGN_RECORDS, updatedAt: data.updatedAt || new Date().toISOString() }));
+    if ($("tab-assign")?.classList.contains("active")) renderAssignTab();
+
+  } catch(e) {
+    const cached = localStorage.getItem(LS_ASSIGN);
+    if (cached) {
+      ASSIGN_RECORDS = JSON.parse(cached).assignRecords || [];
+    }
   }
 }
 
@@ -1836,7 +1856,10 @@ function switchTab(name, btn) {
     else renderDailyTab();
   }
   if (name === "lookup") $("lookupInput").focus();
-  if (name === "assign") renderAssignTab();
+  if (name === "assign") {
+    if (!ASSIGN_RECORDS.length) loadAssign().then(() => renderAssignTab());
+    else renderAssignTab();
+  }
 }
 
 // ── 대시보드 필터 상태 ───────────────────────────────────
