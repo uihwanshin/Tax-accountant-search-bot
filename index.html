@@ -385,12 +385,22 @@
     <!-- 필터 바 -->
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
       <!-- 수임 상태 필터 -->
-      <div style="display:flex;gap:4px;flex-wrap:wrap;">
-        <button class="dash-filter-btn active" data-filter="all"    onclick="setDashFilter('all',this)"   >전체</button>
-        <button class="dash-filter-btn"        data-filter="ok"     onclick="setDashFilter('ok',this)"    >🟢 수임 가능</button>
-        <button class="dash-filter-btn"        data-filter="partial" onclick="setDashFilter('partial',this)">🟡 일부 수임 불가</button>
-        <button class="dash-filter-btn"        data-filter="full"   onclick="setDashFilter('full',this)"  >🔴 수임 불가</button>
-      </div>
+      <label class="sr-filter-label" onclick="setDashFilter('all',this)" data-filter="all" style="cursor:pointer;">
+        <span class="chk-box" id="chk-all" style="background:var(--primary);border-color:var(--primary);"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span>전체</span>
+      </label>
+      <label class="sr-filter-label" onclick="setDashFilter('ok',this)" data-filter="ok" style="cursor:pointer;">
+        <span class="chk-box" id="chk-ok"></span>
+        <span>🟢 수임 가능</span>
+      </label>
+      <label class="sr-filter-label" onclick="setDashFilter('partial',this)" data-filter="partial" style="cursor:pointer;">
+        <span class="chk-box" id="chk-partial"></span>
+        <span>🟡 일부 수임 불가</span>
+      </label>
+      <label class="sr-filter-label" onclick="setDashFilter('full',this)" data-filter="full" style="cursor:pointer;">
+        <span class="chk-box" id="chk-full"></span>
+        <span>🔴 수임 불가</span>
+      </label>
       <!-- SR 필터 -->
       <label class="sr-filter-label">
         <input type="checkbox" id="dashSrIndOnly" onchange="renderDashboard()">
@@ -1920,10 +1930,21 @@ function switchTab(name, btn) {
 // ── 대시보드 필터 상태 ───────────────────────────────────
 let dashFilter = "all"; // all | ok | partial | full
 
-function setDashFilter(val, btn) {
+function setDashFilter(val, el) {
   dashFilter = val;
-  document.querySelectorAll(".dash-filter-btn").forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
+  ["all","ok","partial","full"].forEach(f => {
+    const chk = $(`chk-${f}`);
+    if (!chk) return;
+    if (f === val) {
+      chk.style.background   = "var(--primary)";
+      chk.style.borderColor  = "var(--primary)";
+      chk.innerHTML = `<svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    } else {
+      chk.style.background  = "";
+      chk.style.borderColor = "";
+      chk.innerHTML = "";
+    }
+  });
   renderDashboard();
 }
 
