@@ -1593,8 +1593,12 @@ function renderResults(list, q) {
     }
     // 업종 매칭 정보 표시 (A섹션 및 C섹션 중 매칭된 것)
     if (t.industryMatched && t.industries_ok) {
-      const prev = t.industries_ok.slice(0,120)+(t.industries_ok.length>120?"…":"");
-      html += `<div class="match-box"><strong>✓ 업종 매칭 (${t.matchCount}/${q.industries.length})</strong> — ${prev}</div>`;
+      const allIndustries = t.industries_ok.split(/[,，、\n]/).map(s => s.trim()).filter(Boolean);
+      const highlighted = allIndustries.map(ind => {
+        const isMatched = q.industries.some(qi => ind.includes(qi) || qi.includes(ind));
+        return isMatched ? `<strong>${ind}</strong>` : ind;
+      }).join(", ");
+      html += `<div class="match-box"><strong>✓ 업종 매칭 (${t.matchCount}/${q.industries.length})</strong> — ${highlighted}</div>`;
     }
     // B섹션 안내 메시지 세분화
     if (t.section === "B") {
