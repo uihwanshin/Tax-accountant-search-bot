@@ -506,16 +506,46 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
+// =============================================================
+// 세무사 배정 시스템 — 클라이언트 스크립트
+// =============================================================
+// 구조 개요:
+//   1. 전역 상수 / 상태 변수
+//   2. 유틸리티 (날짜, 영업일, 좌표)
+//   3. 데이터 로드 (loadTaxData / loadAirtable / loadAssign)
+//   4. 검색 및 렌더링 (doSearch / renderResults)
+//   5. 탭별 렌더링 (renderDashboard / renderDailyTab / renderAssignTab)
+//   6. 자가 진단 (runTests)
+//   7. 인증 (checkPassword / toggleAdmin)
+// =============================================================
+
 /** getElementById 단축 헬퍼 — 스크립트 전체에서 사용 */
 const $ = id => document.getElementById(id);
 
 /** 날짜 포맷 유틸 */
 const formatDateTime = dt => `${dt.getFullYear()}.${String(dt.getMonth()+1).padStart(2,"0")}.${String(dt.getDate()).padStart(2,"0")} ${String(dt.getHours()).padStart(2,"0")}:${String(dt.getMinutes()).padStart(2,"0")}`;
 
+// ── 전역 상태 ─────────────────────────────────────────────────
+// CONTRACT_MAP: Worker /airtable 에서 집계된 지점별 계약 현황
+//   { "지점명": { individual: N, corporate: N, feeSum: N, feeCount: N } }
+// CONTRACT_DATES: 지점별 계약일 이력 (일별 배정 현황 탭에서 사용)
+//   { "지점명": [{date:"YYYY-MM-DD", bizType:"개인사업자"|"법인사업자"}, ...] }
+// ASSIGN_RECORDS: Worker /assign 에서 받은 소요일 분석용 raw 데이터
+//   [{ assignee, month, days, assignDate, contractDate }, ...]
+//   ※ days는 클라이언트에서 countBusinessDays()로 영업일 기준 계산
+// PENDING_RECORDS: 미계약 현황 데이터
+//   [{ assignee, assignDate, status, month }, ...]
+
 /** CONTRACT_MAP 역방향 조회 인덱스 (O(1) 조회용) */
 let _contractIndex = new Map();
-let ASSIGN_RECORDS  = []; // [{ assignee, month, days }, ...]
+let ASSIGN_RECORDS  = []; // [{ assignee, month, days, assignDate, contractDate }, ...]
 let PENDING_RECORDS = []; // [{ assignee, assignDate, status, month }, ...]
+
+/**
+ * CONTRACT_MAP 키를 소문자/단어 단위로 인덱싱한다.
+ * getRemaining()에서 지점명 매칭 시 O(1) 조회를 위해 사용.
+ * loadAirtable() 또는 캐시 복원 직후 반드시 호출해야 한다.
+ */
 function buildContractIndex() {
   _contractIndex = new Map();
   for (const ck of Object.keys(CONTRACT_MAP)) {
@@ -527,7 +557,14 @@ function buildContractIndex() {
   }
 }
 
+// ── 엔드포인트 URL ───────────────────────────────────────────
+// CSV_URL   : 세무사 정보 Google Sheets (공개 CSV)
+// WORKER_URL: 계약 현황 집계 (이번 달 필터 적용, Cloudflare Worker)
+// TAXDATA_URL: 세무사 정보 (Airtable tblibWfK7iYHG2gbd)
+// SEARCH_URL : 업체 이력 조회 (filterByFormula 사용)
+// ASSIGN_URL : 소요일 분석 (최근 3개월, 세무사배정일 기준)
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQxPoON_qWplhsQpChFTxqAOVA-EgqIP5qpJ3jq6Y3pB3-Nj70DLXJ7QUtm8OuDNOZoFha97URx-VK6/pub?gid=0&single=true&output=csv";
+
 // 날짜 기반 캐시 키 — 함수로 매번 계산해서 자정 넘김 문제 방지 (버그 #6 수정)
 function getToday() { return new Date().toISOString().slice(0,10); }
 const LS_KEY_PREFIX = "semusa_data_";
@@ -543,7 +580,10 @@ const TAXDATA_URL     = "https://savetax-airtable-proxy.suh-204.workers.dev/taxd
 const SEARCH_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/search";
 const ASSIGN_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/assign";
 
-// ── 2026년 공휴일 ────────────────────────────────────────
+// ── 2026년 공휴일 ────────────────────────────────────────────
+// 새해가 바뀌면 이 목록을 갱신해야 한다.
+// 연도가 바뀔 경우 HOLIDAYS_2026 → HOLIDAYS_20XX 로 상수명도 함께 변경.
+// 출처: 인사혁신처 공고 기준 (대체공휴일 포함)
 const HOLIDAYS_2026 = new Set([
   "2026-01-01","2026-02-16","2026-02-17","2026-02-18",
   "2026-03-01","2026-03-02","2026-05-01","2026-05-05",
@@ -553,14 +593,25 @@ const HOLIDAYS_2026 = new Set([
   "2026-10-09","2026-12-25",
 ]);
 
-/** 날짜 문자열 "YYYY-MM-DD"가 영업일인지 확인 */
+/**
+ * 날짜 문자열 "YYYY-MM-DD"가 영업일인지 확인한다.
+ * 토/일 및 HOLIDAYS_2026 목록에 없으면 영업일로 판단.
+ * @param {string} dateStr - "YYYY-MM-DD" 형식
+ * @returns {boolean}
+ */
 function isBusinessDay(dateStr) {
   const d = new Date(dateStr);
   const dow = d.getDay(); // 0=일, 6=토
   return dow !== 0 && dow !== 6 && !HOLIDAYS_2026.has(dateStr);
 }
 
-/** 기준일로부터 n 영업일 후 날짜를 "YYYY-MM-DD"로 반환 */
+/**
+ * 기준일로부터 n 영업일 후 날짜를 반환한다.
+ * 미계약 현황의 3영업일 초과 판단 기준일 계산에 사용.
+ * @param {string} dateStr - 기준일 "YYYY-MM-DD"
+ * @param {number} n - 영업일 수
+ * @returns {string} "YYYY-MM-DD"
+ */
 function addBusinessDays(dateStr, n) {
   const d = new Date(dateStr);
   let count = 0;
@@ -572,7 +623,13 @@ function addBusinessDays(dateStr, n) {
   return d.toISOString().slice(0,10);
 }
 
-/** 두 날짜 사이 영업일 수를 반환 (시작일 포함 안 함, 종료일 포함) */
+/**
+ * 두 날짜 사이 영업일 수를 반환한다. (시작일 미포함, 종료일 포함)
+ * Worker에서 raw 날짜를 받아 클라이언트에서 영업일 기준 소요일을 계산할 때 사용.
+ * @param {string} fromStr - 시작일 "YYYY-MM-DD" (세무사 배정일)
+ * @param {string} toStr   - 종료일 "YYYY-MM-DD" (계약서 공유일)
+ * @returns {number} 영업일 수
+ */
 function countBusinessDays(fromStr, toStr) {
   const from = new Date(fromStr);
   const to   = new Date(toStr);
@@ -588,8 +645,9 @@ function countBusinessDays(fromStr, toStr) {
 }
 const REFRESH_BTN_IDS = ["refreshBtn","dashRefreshBtn","dailyRefreshBtn"];
 let TAX_DATA        = [];
-let CONTRACT_MAP    = {}; // { "지점명": { individual: N, corporate: N } }
-let CONTRACT_DATES  = {}; // { "지점명": [{date:"YYYY-MM-DD", bizType:"개인"|"법인"},...] }
+let CONTRACT_MAP    = {}; // { "지점명": { individual: N, corporate: N, feeSum: N, feeCount: N } }
+let CONTRACT_DATES  = {}; // { "지점명": [{date:"YYYY-MM-DD", bizType:"개인사업자"|"법인사업자"},...] }
+let PRE_DATES       = {}; // { "지점명": [{date:"YYYY-MM-DD", bizType},...] } — (법)사업자등록완료 기준
 let adminOpen       = false;
 
 // ── 시/도별 시군구 ────────────────────────────────────────
@@ -865,10 +923,11 @@ async function loadAirtable() {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
-    CONTRACT_MAP   = data.map   || {};
-    CONTRACT_DATES = data.dates || {};
+    CONTRACT_MAP   = data.map      || {};
+    CONTRACT_DATES = data.dates    || {};
+    PRE_DATES      = data.preDates || {};
     buildContractIndex();
-    localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, dates: CONTRACT_DATES, updatedAt: data.updatedAt || new Date().toISOString() }));
+    localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, dates: CONTRACT_DATES, preDates: PRE_DATES, updatedAt: data.updatedAt || new Date().toISOString() }));
     updateStatusBar();
     if ($("tab-dashboard")?.classList.contains("active")) renderDashboard();
 
@@ -876,8 +935,9 @@ async function loadAirtable() {
     const cached = localStorage.getItem(LS_CONTRACT);
     if (cached) {
       const p = JSON.parse(cached);
-      CONTRACT_MAP   = p.map   || {};
-      CONTRACT_DATES = p.dates || {};
+      CONTRACT_MAP   = p.map      || {};
+      CONTRACT_DATES = p.dates    || {};
+      PRE_DATES      = p.preDates || {};
       buildContractIndex();
     }
     updateStatusBar();
@@ -1741,6 +1801,91 @@ function renderDailyTab() {
   });
   html += '</div>';
   gridEl.innerHTML = html;
+
+  // ── 계약 전 업체 배정 현황 (☆진행상황 = (법)사업자등록완료, ☆세무사배정일 기준) ──
+  renderDailyPreSection(date, dateLabel);
+}
+
+/**
+ * 계약 전 업체 배정 현황 섹션을 렌더링한다.
+ * PRE_DATES: Worker에서 ☆진행상황=(법)사업자등록완료 이고 ☆세무사배정일이 있는 건.
+ * @param {string} date      - 선택된 날짜 "YYYY-MM-DD"
+ * @param {string} dateLabel - 표시용 날짜 레이블
+ */
+function renderDailyPreSection(date, dateLabel) {
+  let el = $("dailyPreSection");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "dailyPreSection";
+    el.style.marginTop = "24px";
+    $("dailyGrid").after(el);
+  }
+
+  const dayContracts = {};
+  let totalInd = 0, totalCorp = 0;
+
+  Object.entries(PRE_DATES).forEach(([branch, records]) => {
+    const dayRecs = records.filter(r => r.date === date);
+    if (!dayRecs.length) return;
+    const ind  = dayRecs.filter(r => r.bizType === "개인사업자").length;
+    const corp = dayRecs.filter(r => r.bizType === "법인사업자").length;
+    dayContracts[branch] = { individual: ind, corporate: corp, total: ind + corp };
+    totalInd  += ind;
+    totalCorp += corp;
+  });
+
+  const totalAll = totalInd + totalCorp;
+
+  let html = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:6px">📋 ${dateLabel} 계약 전 업체 배정 현황</div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:14px;">
+        <span>전체 <strong style="font-size:18px;color:var(--text)">${totalAll}</strong>건</span>
+        <span style="color:var(--text-sub)">개인사업자 <strong style="color:var(--text)">${totalInd}</strong>건</span>
+        <span style="color:var(--text-sub)">법인사업자 <strong style="color:var(--text)">${totalCorp}</strong>건</span>
+      </div>
+    </div>`;
+
+  if (!totalAll) {
+    el.innerHTML = html + `<div class="empty-state">${dateLabel}에 배정된 계약 전 업체가 없습니다.</div>`;
+    return;
+  }
+
+  const sorted  = Object.entries(dayContracts).sort((a, b) => b[1].total - a[1].total);
+  const maxTotal = sorted[0][1].total;
+
+  html += '<div class="dashboard-grid">';
+  sorted.forEach(([branch, cnt]) => {
+    const taxer       = TAX_DATA.find(t => t.branch === branch || t.name === branch || t.firm === branch);
+    const displayName = taxer ? formatName(taxer) : branch;
+    const firmName    = taxer ? taxer.firm : "";
+    const warn        = cnt.total >= 5;
+    const barWidth    = Math.round(cnt.total / maxTotal * 100);
+    const cardBorder  = warn
+      ? "border:1.5px solid var(--warn);background:var(--warn-light);"
+      : "border:1px solid var(--border);";
+
+    html += `<div style="${cardBorder}background:${warn ? "var(--warn-light)" : "var(--card)"};border-radius:var(--radius);padding:14px 16px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--text)">${displayName}
+            ${warn ? `<span class="tag" style="background:#FDE8CC;color:#854F0B;font-size:11px;margin-left:6px">⚠️ 5건 이상</span>` : ""}
+          </div>
+          ${firmName ? `<div style="font-size:11px;color:var(--text-sub);margin-top:2px">${firmName}</div>` : ""}
+        </div>
+        <strong style="font-size:20px;color:${warn ? "var(--warn)" : "var(--accent)"};">${cnt.total}<span style="font-size:11px;font-weight:400;color:var(--text-sub)">건</span></strong>
+      </div>
+      <div style="height:5px;background:var(--border);border-radius:3px;margin-bottom:8px;">
+        <div style="height:5px;border-radius:3px;width:${barWidth}%;background:${warn ? "var(--warn)" : "var(--accent)"};"></div>
+      </div>
+      <div style="display:flex;gap:10px;font-size:11px;color:var(--text-sub);">
+        <span>👤 개인사업자 <strong style="color:var(--text)">${cnt.individual}건</strong></span>
+        <span>🏢 법인사업자 <strong style="color:var(--text)">${cnt.corporate}건</strong></span>
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+  el.innerHTML = html;
 }
 
 
@@ -2397,6 +2542,23 @@ function makeDashCard(t, status) {
 
 <!-- 디버그 테스트 (Console에서 runTests() 호출) -->
 <script>
+// =============================================================
+// AI 자가 진단 하네스 (runTests)
+// =============================================================
+// 브라우저 콘솔에서 runTests() 를 실행하면 전체 항목을 점검한다.
+//
+// 점검 범위:
+//   - 데이터 로드 상태 (TAX_DATA, CONTRACT_MAP, CONTRACT_DATES, ASSIGN_RECORDS)
+//   - 인덱스 빌드 (_contractIndex)
+//   - SR 세무사 존재 여부
+//   - 지점명 매칭 (Airtable ↔ Sheets)
+//   - 좌표 매핑 (DISTRICT_COORDS, coordFromAddress)
+//   - getRemaining 반환값 구조
+//   - 캐시 키 날짜 포함 여부
+//   - UI 상태 (검색 버튼 활성화)
+//   - 보안 (비밀번호 해시 방식, 관리자 해시 방식)
+//   - 영업일 계산 (countBusinessDays, addBusinessDays)
+// =============================================================
 function runTests() {
   console.group("🧪 세무사 봇 자가 진단");
   let pass = 0, fail = 0;
@@ -2409,27 +2571,30 @@ function runTests() {
     } catch(e) { console.error(`💥 ${name} → 예외:`, e.message); fail++; }
   }
 
-  // ── 데이터 로드 ────────────────────────────────────────
+  // ── 데이터 로드 ────────────────────────────────────────────
   test("TAX_DATA 로드됨", () =>
     TAX_DATA.length > 0 ? true : `비어있음 (0개) — 🔄 새로고침 후 재시도`);
 
   test("CONTRACT_MAP 로드됨", () =>
-    Object.keys(CONTRACT_MAP).length > 0 ? true : "비어있음 — Airtable 연동 확인");
+    Object.keys(CONTRACT_MAP).length > 0 ? true : "비어있음 — Airtable 연동 확인 (Worker /airtable)");
 
   test("CONTRACT_DATES 로드됨", () =>
     Object.keys(CONTRACT_DATES).length > 0 ? true : "비어있음 — Worker ☆계약서공유일 필드 확인");
 
-  // ── 인덱스 ─────────────────────────────────────────────
+  test("ASSIGN_RECORDS 로드됨", () =>
+    ASSIGN_RECORDS.length > 0 ? true : "비어있음 — Worker /assign 확인. 계약 소요일 탭 진입 후 재시도");
+
+  // ── 인덱스 ──────────────────────────────────────────────────
   test("_contractIndex 빌드됨", () =>
     _contractIndex.size > 0 ? true : `크기 0 — buildContractIndex() 실행 필요`);
 
-  // ── SR 세무사 ───────────────────────────────────────────
+  // ── SR 세무사 ────────────────────────────────────────────────
   test("SR 세무사 존재", () => {
     const cnt = TAX_DATA.filter(t => t.sr).length;
     return cnt > 0 ? true : "SR 세무사 없음 — SR개인수임/SR법인수임 컬럼 확인";
   });
 
-  // ── 지점명 매칭 ─────────────────────────────────────────
+  // ── 지점명 매칭 ──────────────────────────────────────────────
   test("Airtable ↔ Sheets 지점명 매칭", () => {
     const atKeys  = Object.keys(CONTRACT_MAP);
     const botKeys = TAX_DATA.map(t => t.branch).filter(Boolean);
@@ -2437,7 +2602,7 @@ function runTests() {
     return unmatched.length === 0 ? true : `미매칭 지점: ${unmatched.join(", ")}`;
   });
 
-  // ── 좌표 ───────────────────────────────────────────────
+  // ── 좌표 ─────────────────────────────────────────────────────
   test("서울 구 좌표 매핑", () => {
     const coord = DISTRICT_COORDS["서울강남구"];
     return coord ? true : "서울강남구 좌표 없음 — DISTRICT_COORDS 확인";
@@ -2453,7 +2618,7 @@ function runTests() {
     return DISTRICT_COORDS[key] ? true : `"${key}" 키 없음`;
   });
 
-  // ── getRemaining ───────────────────────────────────────
+  // ── getRemaining ─────────────────────────────────────────────
   test("getRemaining 정상 작동", () => {
     const t = TAX_DATA[0];
     if (!t) return "TAX_DATA 비어있음";
@@ -2462,7 +2627,7 @@ function runTests() {
       ? true : `반환값 이상: ${JSON.stringify(r)}`;
   });
 
-  // ── 캐시 키 ────────────────────────────────────────────
+  // ── 캐시 키 ──────────────────────────────────────────────────
   test("getToday() 오늘 날짜 반환", () => {
     const today = getToday();
     const expected = new Date().toISOString().slice(0,10);
@@ -2473,21 +2638,39 @@ function runTests() {
     return LS_KEY.includes(getToday()) ? true : `LS_KEY = ${LS_KEY}`;
   });
 
-  // ── UI ─────────────────────────────────────────────────
+  // ── 영업일 계산 ───────────────────────────────────────────────
+  test("countBusinessDays 정상 작동", () => {
+    // 2026-03-02(월) → 2026-03-06(금): 4영업일
+    const result = countBusinessDays("2026-03-02", "2026-03-06");
+    return result === 4 ? true : `예상 4, 실제 ${result}`;
+  });
+
+  test("addBusinessDays 공휴일 스킵", () => {
+    // 2026-04-30(목) + 3영업일 = 5/1 근로자날 스킵 → 5/6(수)
+    const result = addBusinessDays("2026-04-30", 3);
+    return result === "2026-05-06" ? true : `예상 2026-05-06, 실제 ${result}`;
+  });
+
+  // ── UI ────────────────────────────────────────────────────────
   test("검색 버튼 활성화 상태", () => {
     const btn = document.querySelector(".btn-search");
     return btn && !btn.disabled ? true : "검색 버튼 비활성화됨";
   });
 
-  test("비밀번호 해시 방식 사용", () => {
+  // ── 보안 ──────────────────────────────────────────────────────
+  test("잠금 비밀번호 해시 방식 사용", () => {
     return typeof LOCK_HASH !== "undefined" && typeof LOCK_PW === "undefined"
       ? true : "LOCK_PW 평문 노출 — 해시 방식으로 변경 필요";
   });
 
-  // ── 결과 요약 ───────────────────────────────────────────
+  test("관리자 비밀번호 해시 방식 사용", () => {
+    return typeof ADMIN_HASH !== "undefined"
+      ? true : "ADMIN_HASH 없음 — toggleAdmin 확인 필요";
+  });
+
+  // ── 결과 요약 ─────────────────────────────────────────────────
   const total = pass + fail;
-  console.log(`
-📊 결과: ${pass}/${total} 통과 ${fail > 0 ? `(${fail}개 실패)` : "✅ 전체 통과"}`);
+  console.log(`\n📊 결과: ${pass}/${total} 통과 ${fail > 0 ? `(${fail}개 실패)` : "✅ 전체 통과"}`);
   if (fail > 0) console.warn("⚠️ 실패 항목을 확인하고 🔄 새로고침 후 재시도하세요.");
   console.groupEnd();
   return { pass, fail, total };
