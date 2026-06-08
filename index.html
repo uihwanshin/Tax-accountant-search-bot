@@ -1882,7 +1882,7 @@ function renderDailyPreSection(date, dateLabel) {
     </div>`;
 
   if (!totalAll) {
-    el.innerHTML = "";
+    el.innerHTML = html + `<div class="empty-state">${dateLabel}에 배정된 계약이 없습니다.</div>`;
     return;
   }
 
