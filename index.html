@@ -615,14 +615,16 @@ function isBusinessDay(dateStr) {
  * @returns {string} "YYYY-MM-DD"
  */
 function addBusinessDays(dateStr, n) {
-  const d = new Date(dateStr);
+  // "YYYY-MM-DD"를 로컬 시간 기준으로 파싱 (UTC 파싱 시 시차로 날짜 밀림 방지)
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
   let count = 0;
   while (count < n) {
-    d.setDate(d.getDate() + 1);
-    const s = d.toISOString().slice(0,10);
+    date.setDate(date.getDate() + 1);
+    const s = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
     if (isBusinessDay(s)) count++;
   }
-  return d.toISOString().slice(0,10);
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
 }
 
 /**
@@ -633,15 +635,17 @@ function addBusinessDays(dateStr, n) {
  * @returns {number} 영업일 수
  */
 function countBusinessDays(fromStr, toStr) {
-  const from = new Date(fromStr);
-  const to   = new Date(toStr);
+  const parseLocal = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+  const from = parseLocal(fromStr);
+  const to   = parseLocal(toStr);
   if (to <= from) return 0;
   let count = 0;
-  const d = new Date(from);
-  d.setDate(d.getDate() + 1);
-  while (d <= to) {
-    if (isBusinessDay(d.toISOString().slice(0,10))) count++;
-    d.setDate(d.getDate() + 1);
+  const cur = new Date(from);
+  cur.setDate(cur.getDate() + 1);
+  while (cur <= to) {
+    const s = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,"0")}-${String(cur.getDate()).padStart(2,"0")}`;
+    if (isBusinessDay(s)) count++;
+    cur.setDate(cur.getDate() + 1);
   }
   return count;
 }
@@ -1718,6 +1722,7 @@ function shiftDailyDate(delta) {
 async function loadDailyData() {
   setRefreshBtns("⏳ 불러오는 중...", true);
   await loadAirtable();
+  await loadDailyPre();
   renderDailyTab();
   setRefreshBtns("✅ 완료", false);
   setTimeout(() => setRefreshBtns("🔄 새로고침", false), 2000);
@@ -2090,6 +2095,7 @@ function switchTab(name, btn) {
   if (name === "daily") {
     if (!$("dailyDatePicker").value) setDailyToday();
     else renderDailyTab();
+    if (!Object.keys(PRE_DATES).length) loadDailyPre();
   }
   if (name === "lookup") $("lookupInput").focus();
   if (name === "assign") {
@@ -2662,9 +2668,10 @@ function runTests() {
   });
 
   test("addBusinessDays 공휴일 스킵", () => {
-    // 2026-04-30(목) + 3영업일 = 5/1 근로자날 스킵 → 5/6(수)
+    // 2026-04-30(목) + 3영업일
+    // 5/1(금,근로자날)·5/2(토)·5/3(일) 스킵 → 5/4(월)+5/5(화,어린이날) 스킵 → 5/6(수)+5/7(목) = 3영업일
     const result = addBusinessDays("2026-04-30", 3);
-    return result === "2026-05-06" ? true : `예상 2026-05-06, 실제 ${result}`;
+    return result === "2026-05-07" ? true : `예상 2026-05-07, 실제 ${result}`;
   });
 
   // ── UI ────────────────────────────────────────────────────────
