@@ -1741,6 +1741,7 @@ function renderDailyTab() {
   if (!Object.keys(CONTRACT_DATES).length) {
     gridEl.innerHTML = `<div class="empty-state">계약 현황 데이터가 없습니다. 🔄 새로고침을 눌러주세요.</div>`;
     summaryEl.innerHTML = "";
+    renderDailyPreSection(date, date === getToday() ? `오늘 (${date})` : date);
     return;
   }
 
@@ -1774,6 +1775,7 @@ function renderDailyTab() {
 
   if (!totalAll) {
     gridEl.innerHTML = `<div class="empty-state">${dateLabel}에 배정된 계약이 없습니다.</div>`;
+    renderDailyPreSection(date, dateLabel);
     return;
   }
 
