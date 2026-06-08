@@ -573,12 +573,14 @@ const LS_META_PREFIX = "semusa_meta_";
 Object.defineProperty(window, 'TODAY',  { get: () => getToday() });
 Object.defineProperty(window, 'LS_KEY', { get: () => LS_KEY_PREFIX  + getToday() });
 Object.defineProperty(window, 'LS_META',{ get: () => LS_META_PREFIX + getToday() });
-const LS_CONTRACT  = "semusa_contract_v1"; // Airtable는 실시간이라 날짜 무관
+const LS_CONTRACT  = "semusa_contract_v1";
 const LS_ASSIGN    = "semusa_assign_v1";
+const LS_DAILY     = "semusa_daily_v1";
 const WORKER_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/airtable";
 const TAXDATA_URL     = "https://savetax-airtable-proxy.suh-204.workers.dev/taxdata";
 const SEARCH_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/search";
 const ASSIGN_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/assign";
+const DAILY_URL       = "https://savetax-airtable-proxy.suh-204.workers.dev/daily";
 
 // ── 2026년 공휴일 ────────────────────────────────────────────
 // 새해가 바뀌면 이 목록을 갱신해야 한다.
@@ -880,9 +882,9 @@ async function manualRefresh() {
 
 async function loadData() {
   setStatus('<span class="spinner"></span>데이터 불러오는 중...');
-  // 세무사 정보 + 계약 현황 병렬 로드, 소요일은 독립적으로 별도 로드
   await Promise.all([loadTaxData(), loadAirtable()]);
-  loadAssign(); // 응답 느림 — await 없이 백그라운드 로드
+  loadAssign();    // 소요일 분석 — 백그라운드 로드
+  loadDailyPre();  // 계약 전 업체 — 백그라운드 로드
 }
 
 // ── 세무사 정보 로드 (Airtable /taxdata) ────────────────
@@ -923,11 +925,10 @@ async function loadAirtable() {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
-    CONTRACT_MAP   = data.map      || {};
-    CONTRACT_DATES = data.dates    || {};
-    PRE_DATES      = data.preDates || {};
+    CONTRACT_MAP   = data.map   || {};
+    CONTRACT_DATES = data.dates || {};
     buildContractIndex();
-    localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, dates: CONTRACT_DATES, preDates: PRE_DATES, updatedAt: data.updatedAt || new Date().toISOString() }));
+    localStorage.setItem(LS_CONTRACT, JSON.stringify({ map: CONTRACT_MAP, dates: CONTRACT_DATES, updatedAt: data.updatedAt || new Date().toISOString() }));
     updateStatusBar();
     if ($("tab-dashboard")?.classList.contains("active")) renderDashboard();
 
@@ -935,9 +936,8 @@ async function loadAirtable() {
     const cached = localStorage.getItem(LS_CONTRACT);
     if (cached) {
       const p = JSON.parse(cached);
-      CONTRACT_MAP   = p.map      || {};
-      CONTRACT_DATES = p.dates    || {};
-      PRE_DATES      = p.preDates || {};
+      CONTRACT_MAP   = p.map   || {};
+      CONTRACT_DATES = p.dates || {};
       buildContractIndex();
     }
     updateStatusBar();
@@ -970,6 +970,22 @@ async function loadAssign() {
       }));
       PENDING_RECORDS = p.pendingRecords || [];
     }
+  }
+}
+
+// ── 계약 전 업체 배정 현황 로드 (/daily) ────────────────────
+async function loadDailyPre() {
+  try {
+    const res = await fetch(DAILY_URL);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    PRE_DATES = data.preDates || {};
+    localStorage.setItem(LS_DAILY, JSON.stringify({ preDates: PRE_DATES, updatedAt: data.updatedAt || new Date().toISOString() }));
+    if ($("tab-daily")?.classList.contains("active")) renderDailyTab();
+  } catch(e) {
+    const cached = localStorage.getItem(LS_DAILY);
+    if (cached) PRE_DATES = JSON.parse(cached).preDates || {};
   }
 }
 
