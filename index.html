@@ -1850,21 +1850,28 @@ function renderDailyPreSection(date, dateLabel) {
     if (!dayRecs.length) return;
     const ind  = dayRecs.filter(r => r.bizType === "개인사업자").length;
     const corp = dayRecs.filter(r => r.bizType === "법인사업자").length;
-    const total = dayRecs.length; // bizType 빈 값 포함
+    const total = dayRecs.length;
     dayContracts[branch] = { individual: ind, corporate: corp, total };
     totalInd  += ind;
     totalCorp += corp;
   });
 
-  const totalAll = Object.values(dayContracts).reduce((s, c) => s + c.total, 0);
+  const preTotal = Object.values(dayContracts).reduce((s, c) => s + c.total, 0);
+
+  // 기존 배정 현황(☆계약서공유일 기준) 당일 건수 합산
+  let contractTotal = 0;
+  Object.values(CONTRACT_DATES).forEach(records => {
+    contractTotal += records.filter(r => r.date === date).length;
+  });
+
+  const totalAll = preTotal + contractTotal;
 
   let html = `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
       <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:6px">📋 ${dateLabel} 계약 전 업체 배정 현황</div>
       <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:14px;">
         <span>전체 <strong style="font-size:18px;color:var(--text)">${totalAll}</strong>건</span>
-        <span style="color:var(--text-sub)">개인사업자 <strong style="color:var(--text)">${totalInd}</strong>건</span>
-        <span style="color:var(--text-sub)">법인사업자 <strong style="color:var(--text)">${totalCorp}</strong>건</span>
+        <span style="color:var(--text-sub);font-size:12px;">(계약완료 ${contractTotal}건 + 계약전 ${preTotal}건)</span>
       </div>
     </div>`;
 
