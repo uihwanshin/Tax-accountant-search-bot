@@ -457,6 +457,9 @@
 
     <!-- 세무사별 배정 목록 -->
     <div id="dailyGrid"></div>
+
+    <!-- 계약 전 업체 배정 현황 -->
+    <div id="dailyPreSection" style="margin-top:24px;"></div>
   </div><!-- /tab-daily -->
 
   <!-- 탭: 업체 이력 조회 -->
@@ -1834,53 +1837,56 @@ function renderDailyTab() {
  * @param {string} dateLabel - 표시용 날짜 레이블
  */
 function renderDailyPreSection(date, dateLabel) {
-  let el = $("dailyPreSection");
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "dailyPreSection";
-    el.style.marginTop = "24px";
-    $("dailyGrid").after(el);
-  }
+  const el = $("dailyPreSection");
+  if (!el) return;
 
+  // CONTRACT_DATES(계약완료) + PRE_DATES(계약전) 지점별 합산
   const dayContracts = {};
-  let totalInd = 0, totalCorp = 0;
 
+  // 계약 완료 건 (☆계약서공유일 기준)
+  Object.entries(CONTRACT_DATES).forEach(([branch, records]) => {
+    const dayRecs = records.filter(r => r.date === date);
+    if (!dayRecs.length) return;
+    const ind  = dayRecs.filter(r => r.bizType === "개인사업자").length;
+    const corp = dayRecs.filter(r => r.bizType === "법인사업자").length;
+    if (!dayContracts[branch]) dayContracts[branch] = { individual: 0, corporate: 0, total: 0 };
+    dayContracts[branch].individual += ind;
+    dayContracts[branch].corporate  += corp;
+    dayContracts[branch].total      += dayRecs.length;
+  });
+
+  // 계약 전 건 (☆세무사배정일 기준)
   Object.entries(PRE_DATES).forEach(([branch, records]) => {
     const dayRecs = records.filter(r => r.date === date);
     if (!dayRecs.length) return;
     const ind  = dayRecs.filter(r => r.bizType === "개인사업자").length;
     const corp = dayRecs.filter(r => r.bizType === "법인사업자").length;
-    const total = dayRecs.length;
-    dayContracts[branch] = { individual: ind, corporate: corp, total };
-    totalInd  += ind;
-    totalCorp += corp;
+    if (!dayContracts[branch]) dayContracts[branch] = { individual: 0, corporate: 0, total: 0 };
+    dayContracts[branch].individual += ind;
+    dayContracts[branch].corporate  += corp;
+    dayContracts[branch].total      += dayRecs.length;
   });
 
-  const preTotal = Object.values(dayContracts).reduce((s, c) => s + c.total, 0);
-
-  // 기존 배정 현황(☆계약서공유일 기준) 당일 건수 합산
-  let contractTotal = 0;
-  Object.values(CONTRACT_DATES).forEach(records => {
-    contractTotal += records.filter(r => r.date === date).length;
-  });
-
-  const totalAll = preTotal + contractTotal;
+  const totalAll  = Object.values(dayContracts).reduce((s, c) => s + c.total, 0);
+  const totalInd  = Object.values(dayContracts).reduce((s, c) => s + c.individual, 0);
+  const totalCorp = Object.values(dayContracts).reduce((s, c) => s + c.corporate, 0);
 
   let html = `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
-      <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:6px">📋 ${dateLabel} 계약 전 업체 배정 현황</div>
+      <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:6px">📋 ${dateLabel} 계약 전 업체 배정 포함 현황</div>
       <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:14px;">
         <span>전체 <strong style="font-size:18px;color:var(--text)">${totalAll}</strong>건</span>
-        <span style="color:var(--text-sub);font-size:12px;">(계약완료 ${contractTotal}건 + 계약전 ${preTotal}건)</span>
+        <span style="color:var(--text-sub)">개인사업자 <strong style="color:var(--text)">${totalInd}</strong>건</span>
+        <span style="color:var(--text-sub)">법인사업자 <strong style="color:var(--text)">${totalCorp}</strong>건</span>
       </div>
     </div>`;
 
   if (!totalAll) {
-    el.innerHTML = html + `<div class="empty-state">${dateLabel}에 배정된 계약 전 업체가 없습니다.</div>`;
+    el.innerHTML = html + `<div class="empty-state">${dateLabel}에 배정된 계약이 없습니다.</div>`;
     return;
   }
 
-  const sorted  = Object.entries(dayContracts).sort((a, b) => b[1].total - a[1].total);
+  const sorted   = Object.entries(dayContracts).sort((a, b) => b[1].total - a[1].total);
   const maxTotal = sorted[0][1].total;
 
   html += '<div class="dashboard-grid">';
