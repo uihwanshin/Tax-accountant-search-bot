@@ -1839,6 +1839,7 @@ function renderDailyTab() {
 function renderDailyPreSection(date, dateLabel) {
   const el = $("dailyPreSection");
   if (!el) return;
+  el.innerHTML = ""; // 매번 초기화
 
   // CONTRACT_DATES(계약완료) + PRE_DATES(계약전) 지점별 합산
   const dayContracts = {};
