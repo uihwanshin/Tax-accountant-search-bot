@@ -986,11 +986,11 @@ async function loadDailyPre() {
     if (data.error) throw new Error(data.error);
     PRE_DATES = data.preDates || {};
     localStorage.setItem(LS_DAILY, JSON.stringify({ preDates: PRE_DATES, updatedAt: data.updatedAt || new Date().toISOString() }));
-    if ($("tab-daily")?.classList.contains("active")) renderDailyTab();
   } catch(e) {
     const cached = localStorage.getItem(LS_DAILY);
     if (cached) PRE_DATES = JSON.parse(cached).preDates || {};
   }
+  if ($("tab-daily")?.classList.contains("active")) renderDailyTab();
 }
 
 function updateStatusBar() {
@@ -1850,12 +1850,13 @@ function renderDailyPreSection(date, dateLabel) {
     if (!dayRecs.length) return;
     const ind  = dayRecs.filter(r => r.bizType === "개인사업자").length;
     const corp = dayRecs.filter(r => r.bizType === "법인사업자").length;
-    dayContracts[branch] = { individual: ind, corporate: corp, total: ind + corp };
+    const total = dayRecs.length; // bizType 빈 값 포함
+    dayContracts[branch] = { individual: ind, corporate: corp, total };
     totalInd  += ind;
     totalCorp += corp;
   });
 
-  const totalAll = totalInd + totalCorp;
+  const totalAll = Object.values(dayContracts).reduce((s, c) => s + c.total, 0);
 
   let html = `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
