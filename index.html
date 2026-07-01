@@ -1744,18 +1744,18 @@ function renderDailyTab() {
   const summaryEl = $("dailySummary");
   const gridEl    = $("dailyGrid");
 
-  if (!Object.keys(CONTRACT_DATES).length) {
+  if (!Object.keys(DAILY_CONTRACT_DATES).length) {
     gridEl.innerHTML = `<div class="empty-state">계약 현황 데이터가 없습니다. 🔄 새로고침을 눌러주세요.</div>`;
     summaryEl.innerHTML = "";
     renderDailyPreSection(date, date === getToday() ? `오늘 (${date})` : date);
     return;
   }
 
-  // 해당 날짜 계약 집계
+  // 해당 날짜 계약 집계 (☆계약서공유일 기준, DAILY_CONTRACT_DATES 사용)
   const dayContracts = {};
   let totalInd = 0, totalCorp = 0;
 
-  Object.entries(CONTRACT_DATES).forEach(([branch, records]) => {
+  Object.entries(DAILY_CONTRACT_DATES).forEach(([branch, records]) => {
     const dayRecs = records.filter(r => r.date === date);
     if (!dayRecs.length) return;
     const ind  = dayRecs.filter(r => r.bizType === "개인사업자").length;
