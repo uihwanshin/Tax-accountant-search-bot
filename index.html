@@ -541,8 +541,10 @@ const formatDateTime = dt => `${dt.getFullYear()}.${String(dt.getMonth()+1).padS
 
 /** CONTRACT_MAP 역방향 조회 인덱스 (O(1) 조회용) */
 let _contractIndex = new Map();
-let ASSIGN_RECORDS  = []; // [{ assignee, month, days, assignDate, contractDate }, ...]
-let PENDING_RECORDS = []; // [{ assignee, assignDate, status, month }, ...]
+let ASSIGN_RECORDS        = []; // [{ assignee, month, days, assignDate, contractDate }, ...]
+let PENDING_RECORDS       = []; // [{ assignee, assignDate, status, month }, ...]
+let PRE_DATES             = {}; // { "지점명": [{date, bizType}, ...] } — 계약 전 (☆최초청구달 없음)
+let DAILY_CONTRACT_DATES  = {}; // { "지점명": [{date, bizType}, ...] } — 세무사배정일 기준 계약완료
 
 /**
  * CONTRACT_MAP 키를 소문자/단어 단위로 인덱싱한다.
@@ -987,11 +989,16 @@ async function loadDailyPre() {
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    PRE_DATES = data.preDates || {};
-    localStorage.setItem(LS_DAILY, JSON.stringify({ preDates: PRE_DATES, updatedAt: data.updatedAt || new Date().toISOString() }));
+    PRE_DATES            = data.preDates       || {};
+    DAILY_CONTRACT_DATES = data.contractDates  || {};
+    localStorage.setItem(LS_DAILY, JSON.stringify({ preDates: PRE_DATES, contractDates: DAILY_CONTRACT_DATES, updatedAt: data.updatedAt || new Date().toISOString() }));
   } catch(e) {
     const cached = localStorage.getItem(LS_DAILY);
-    if (cached) PRE_DATES = JSON.parse(cached).preDates || {};
+    if (cached) {
+      const p = JSON.parse(cached);
+      PRE_DATES            = p.preDates      || {};
+      DAILY_CONTRACT_DATES = p.contractDates || {};
+    }
   }
   if ($("tab-daily")?.classList.contains("active")) renderDailyTab();
 }
@@ -1843,11 +1850,11 @@ function renderDailyPreSection(date, dateLabel) {
   if (!el) return;
   el.innerHTML = ""; // 매번 초기화
 
-  // CONTRACT_DATES(계약완료) + PRE_DATES(계약전) 지점별 합산
+  // DAILY_CONTRACT_DATES(계약완료, 세무사배정일 기준) + PRE_DATES(계약전) 지점별 합산
   const dayContracts = {};
 
-  // 계약 완료 건 (☆계약서공유일 기준)
-  Object.entries(CONTRACT_DATES).forEach(([branch, records]) => {
+  // 계약 완료 건 (☆세무사배정일 기준, /daily에서 수신)
+  Object.entries(DAILY_CONTRACT_DATES).forEach(([branch, records]) => {
     const dayRecs = records.filter(r => r.date === date);
     if (!dayRecs.length) return;
     const ind  = dayRecs.filter(r => r.bizType === "개인사업자").length;
