@@ -2410,29 +2410,35 @@ function renderDashboard() {
   // ── 총계 계산 ────────────────────────────────────────────
   let totalMaxInd = 0, totalMaxCorp = 0;
   let totalUsedInd = 0, totalUsedCorp = 0;
+  let totalRemInd = 0, totalRemCorp = 0;
   let totalMaxSRInd = 0, totalMaxSRCorp = 0;
   let totalUsedSRInd = 0, totalUsedSRCorp = 0;
+  let totalRemSRInd = 0, totalRemSRCorp = 0;
 
   TAX_DATA.forEach(t => {
-    const { usedInd, usedCorp } = getRemaining(t);
-    if (t.individual !== null) totalMaxInd  += t.individual;
-    if (t.corporate  !== null) totalMaxCorp += t.corporate;
+    const { usedInd, usedCorp, remInd, remCorp } = getRemaining(t);
+    const avail = t.available !== "불가능";
+    // 수임 가능 수: 배정가능여부 = 불가능이면 제외
+    if (avail) {
+      if (t.individual !== null) totalMaxInd  += t.individual;
+      if (t.corporate  !== null) totalMaxCorp += t.corporate;
+      if (remInd  !== null) totalRemInd  += remInd;
+      if (remCorp !== null) totalRemCorp += remCorp;
+    }
+    // 계약 업체 수: 배정가능여부 무관하게 포함
+    totalUsedInd  += usedInd;
+    totalUsedCorp += usedCorp;
     if (t.srIndividual !== null) {
       totalMaxSRInd  += t.srIndividual;
       totalUsedSRInd += usedInd;
+      if (remInd !== null) totalRemSRInd += remInd;
     }
     if (t.srCorporate !== null) {
       totalMaxSRCorp  += t.srCorporate;
       totalUsedSRCorp += usedCorp;
+      if (remCorp !== null) totalRemSRCorp += remCorp;
     }
-    totalUsedInd  += usedInd;
-    totalUsedCorp += usedCorp;
   });
-
-  const totalRemInd    = Math.max(0, totalMaxInd    - totalUsedInd);
-  const totalRemCorp   = Math.max(0, totalMaxCorp   - totalUsedCorp);
-  const totalRemSRInd  = Math.max(0, totalMaxSRInd  - totalUsedSRInd);
-  const totalRemSRCorp = Math.max(0, totalMaxSRCorp - totalUsedSRCorp);
 
   function summaryCard(label, max, used, rem, color) {
     const remColor = rem <= 0 ? "var(--danger)" : (max > 0 && rem <= max * 0.2) ? "var(--warn)" : "var(--primary)";
