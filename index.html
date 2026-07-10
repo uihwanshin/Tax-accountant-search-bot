@@ -2410,32 +2410,30 @@ function renderDashboard() {
   // ── 총계 계산 ────────────────────────────────────────────
   let totalMaxInd = 0, totalMaxCorp = 0;
   let totalUsedInd = 0, totalUsedCorp = 0;
-
+  let totalRemInd = 0, totalRemCorp = 0;
   let totalMaxSRInd = 0, totalMaxSRCorp = 0;
   let totalUsedSRInd = 0, totalUsedSRCorp = 0;
+  let totalRemSRInd = 0, totalRemSRCorp = 0;
 
   TAX_DATA.forEach(t => {
-    const { usedInd, usedCorp } = getRemaining(t);
+    const { usedInd, usedCorp, remInd, remCorp } = getRemaining(t);
     if (t.individual !== null) totalMaxInd  += t.individual;
     if (t.corporate  !== null) totalMaxCorp += t.corporate;
-    // SR개인수임 체크된 세무사만 SR·개인 합산
+    if (remInd  !== null) totalRemInd  += remInd;
+    if (remCorp !== null) totalRemCorp += remCorp;
     if (t.srIndividual !== null) {
       totalMaxSRInd  += t.srIndividual;
       totalUsedSRInd += usedInd;
+      totalRemSRInd  += (remInd || 0);
     }
-    // SR법인수임 체크된 세무사만 SR·법인 합산
     if (t.srCorporate !== null) {
       totalMaxSRCorp  += t.srCorporate;
       totalUsedSRCorp += usedCorp;
+      totalRemSRCorp  += (remCorp || 0);
     }
     totalUsedInd  += usedInd;
     totalUsedCorp += usedCorp;
   });
-
-  const totalRemInd    = Math.max(0, totalMaxInd    - totalUsedInd);
-  const totalRemCorp   = Math.max(0, totalMaxCorp   - totalUsedCorp);
-  const totalRemSRInd  = Math.max(0, totalMaxSRInd  - totalUsedSRInd);
-  const totalRemSRCorp = Math.max(0, totalMaxSRCorp - totalUsedSRCorp);
 
   function summaryCard(label, max, used, rem, color) {
     const remColor = rem <= 0 ? "var(--danger)" : (max > 0 && rem <= max * 0.2) ? "var(--warn)" : "var(--primary)";
