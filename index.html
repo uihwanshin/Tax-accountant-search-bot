@@ -2417,8 +2417,6 @@ function renderDashboard() {
 
   TAX_DATA.forEach(t => {
     const { usedInd, usedCorp, remInd, remCorp } = getRemaining(t);
-  TAX_DATA.forEach(t => {
-    const { usedInd, usedCorp, remInd, remCorp } = getRemaining(t);
     // 수임 가능 수: 배정가능여부 무관, 필드값 그대로 합산
     if (t.individual !== null) totalMaxInd  += t.individual;
     if (t.corporate  !== null) totalMaxCorp += t.corporate;
@@ -2428,20 +2426,6 @@ function renderDashboard() {
     // 배정 가능 수: 개별 잔여 합산
     if (remInd  !== null) totalRemInd  += remInd;
     if (remCorp !== null) totalRemCorp += remCorp;
-    if (t.srIndividual !== null) {
-      totalMaxSRInd  += t.srIndividual;
-      totalUsedSRInd += usedInd;
-      if (remInd !== null) totalRemSRInd += remInd;
-    }
-    if (t.srCorporate !== null) {
-      totalMaxSRCorp  += t.srCorporate;
-      totalUsedSRCorp += usedCorp;
-      if (remCorp !== null) totalRemSRCorp += remCorp;
-    }
-  });
-    // 계약 업체 수: 배정가능여부 무관하게 포함
-    totalUsedInd  += usedInd;
-    totalUsedCorp += usedCorp;
     if (t.srIndividual !== null) {
       totalMaxSRInd  += t.srIndividual;
       totalUsedSRInd += usedInd;
