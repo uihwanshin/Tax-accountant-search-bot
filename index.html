@@ -2423,18 +2423,20 @@ function renderDashboard() {
     // 계약 업체 수: 실제 계약 건수 합산
     totalUsedInd  += usedInd;
     totalUsedCorp += usedCorp;
-    // 배정 가능 수: 개별 잔여 합산
-    if (remInd  !== null) totalRemInd  += remInd;
-    if (remCorp !== null) totalRemCorp += remCorp;
+    // 배정 가능 수: 개별 잔여 합산 (배정가능여부 = 불가능 제외)
+    if (t.available !== "불가능") {
+      if (remInd  !== null) totalRemInd  += remInd;
+      if (remCorp !== null) totalRemCorp += remCorp;
+    }
     if (t.srIndividual !== null) {
       totalMaxSRInd  += t.srIndividual;
       totalUsedSRInd += usedInd;
-      if (remInd !== null) totalRemSRInd += remInd;
+      if (t.available !== "불가능" && remInd !== null) totalRemSRInd += remInd;
     }
     if (t.srCorporate !== null) {
       totalMaxSRCorp  += t.srCorporate;
       totalUsedSRCorp += usedCorp;
-      if (remCorp !== null) totalRemSRCorp += remCorp;
+      if (t.available !== "불가능" && remCorp !== null) totalRemSRCorp += remCorp;
     }
   });
 
