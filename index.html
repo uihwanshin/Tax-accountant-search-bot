@@ -1036,7 +1036,6 @@ function parseRow(r) {
     firm:String(r["★상호"]||r["지점명(slack)"]||"").trim(),
     branch:String(r["지점명(slack)"]||"").trim(),
     address:String(r["◆사업장 주소"]||r["사업장 주소"]||"").trim(),
-    phone:String(r["★연락처"]||"").trim(),
     available,sr,
     individual:r["개인 수임"]!==""&&r["개인 수임"]!==undefined?Number(r["개인 수임"]):null,
     corporate:r["법인 수임"]!==""&&r["법인 수임"]!==undefined?Number(r["법인 수임"]):null,
@@ -1614,7 +1613,6 @@ function renderResults(list, q) {
 
     html += `<div class="card-info">`;
     if (t.address) html += `<div class="card-info-row"><span>📍</span><span>${t.address}</span></div>`;
-    if (t.phone && t.phone !== "-") html += `<div class="card-info-row"><span>📞</span><span>${t.phone.split("\n")[0]}</span></div>`;
     // 계약 현황 (계약 수 있을 때만)
     if (totalUsed > 0) {
       html += `<div class="card-info-row" style="margin-top:4px;">
