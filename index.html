@@ -278,7 +278,6 @@
     <button class="tab-btn active" onclick="switchTab('search', this)">🔍 세무사 검색</button>
     <button class="tab-btn" onclick="switchTab('dashboard', this)">📊 배정 현황</button>
     <button class="tab-btn" onclick="switchTab('daily', this)">📅 일별 배정 현황</button>
-    <button class="tab-btn" onclick="switchTab('lookup', this)">🔎 업체 이력 조회</button>
     <button class="tab-btn" onclick="switchTab('assign', this)">⏱️ 계약 소요일</button>
   </div>
 
@@ -462,37 +461,6 @@
     <div id="dailyPreSection" style="margin-top:24px;"></div>
   </div><!-- /tab-daily -->
 
-  <!-- 탭: 업체 이력 조회 -->
-  <div class="tab-content" id="tab-lookup">
-    <div style="margin-bottom:16px;">
-      <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">🔎 업체 이력 조회</div>
-      <div style="font-size:12px;color:var(--text-sub)">상호명 또는 연락처로 기존 계약 이력을 조회합니다.</div>
-    </div>
-
-    <!-- 검색 입력 -->
-    <div class="search-box" style="margin-bottom:16px;">
-      <div class="filter-grid" style="margin-bottom:12px;">
-        <div class="filter-group filter-full">
-          <label class="filter-label">🔍 상호명 또는 연락처</label>
-          <input class="text-input" id="lookupInput" type="text"
-            placeholder="예: 홍길동 / 010-1234-5678"
-            onkeydown="if(event.key==='Enter') doLookup()" />
-        </div>
-        <div class="filter-group">
-          <label class="filter-label">검색 기준</label>
-          <select id="lookupType">
-            <option value="all">상호명 + 연락처</option>
-            <option value="name">상호명만</option>
-            <option value="phone">연락처만</option>
-          </select>
-        </div>
-      </div>
-      <button class="btn-search" onclick="doLookup()">조회하기</button>
-    </div>
-
-    <div id="lookupResults"></div>
-  </div><!-- /tab-lookup -->
-
   <div class="tab-content" id="tab-assign">
     <div style="margin-bottom:16px;">
       <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">⏱️ 계약 소요일 분석</div>
@@ -566,7 +534,6 @@ function buildContractIndex() {
 // CSV_URL   : 세무사 정보 Google Sheets (공개 CSV)
 // WORKER_URL: 계약 현황 집계 (이번 달 필터 적용, Cloudflare Worker)
 // TAXDATA_URL: 세무사 정보 (Airtable tblibWfK7iYHG2gbd)
-// SEARCH_URL : 업체 이력 조회 (filterByFormula 사용)
 // ASSIGN_URL : 소요일 분석 (최근 3개월, 세무사배정일 기준)
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQxPoON_qWplhsQpChFTxqAOVA-EgqIP5qpJ3jq6Y3pB3-Nj70DLXJ7QUtm8OuDNOZoFha97URx-VK6/pub?gid=0&single=true&output=csv";
 
@@ -583,7 +550,6 @@ const LS_ASSIGN    = "semusa_assign_v1";
 const LS_DAILY     = "semusa_daily_v1";
 const WORKER_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/airtable";
 const TAXDATA_URL     = "https://savetax-airtable-proxy.suh-204.workers.dev/taxdata";
-const SEARCH_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/search";
 const ASSIGN_URL      = "https://savetax-airtable-proxy.suh-204.workers.dev/assign";
 const DAILY_URL       = "https://savetax-airtable-proxy.suh-204.workers.dev/daily";
 
@@ -1932,170 +1898,6 @@ function renderDailyPreSection(date, dateLabel) {
   el.innerHTML = html;
 }
 
-
-// ── 업체 이력 조회 ───────────────────────────────────────
-async function doLookup() {
-  const q   = $("lookupInput").value.trim();
-  const type = $("lookupType").value;
-  const el  = $("lookupResults");
-
-  if (!q) {
-    el.innerHTML = `<div class="empty-state">상호명 또는 연락처를 입력해주세요.</div>`;
-    return;
-  }
-
-  const btn = document.querySelector("#tab-lookup .btn-search");
-  if (btn) { btn.textContent = "조회 중..."; btn.disabled = true; }
-  el.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--text-sub);font-size:14px"><span class="spinner"></span>조회 중...</div>`;
-
-  try {
-    const res  = await fetch(`${SEARCH_URL}?q=${encodeURIComponent(q)}&type=${type}`, {
-      headers: { "Origin": location.origin }
-    });
-    const data = await res.json();
-
-    if (data.error) throw new Error(data.error);
-    renderLookup(data.results || [], q);
-  } catch(e) {
-    el.innerHTML = `<div class="empty-state">조회 실패: ${e.message}</div>`;
-  } finally {
-    if (btn) { btn.textContent = "조회하기"; btn.disabled = false; }
-  }
-}
-
-function classifyContract(r) {
-  const status  = r.status || "";
-  const churned = r.isChurned; // 이탈 필드 4개 중 하나라도 값 있음
-
-  // 이탈
-  const CHURN_STATUSES = [
-    "(세)기장계약거절","(세)위약금 수취완료","(세)이용중이탈","(세)폐업",
-    "(세)계약후취소","(세)당사과실기장계약거절","(세)세무기장거절(컴플레인)",
-    "(세)폐업예정","(세)배정후취소"
-  ];
-  if (churned || CHURN_STATUSES.includes(status)) {
-    return {
-      type: "churn",
-      label: "⚠️ 이탈",
-      desc: "해당 업체는 중도 이탈되었습니다.",
-      bg: "var(--danger-light)", border: "var(--danger)", color: "var(--danger)",
-      tagBg: "var(--danger-light)", tagColor: "var(--danger)"
-    };
-  }
-  // 계약 진행 중
-  if (status === "(세)기장계약완료" && !churned) {
-    return {
-      type: "active",
-      label: "✅ 계약 진행 중",
-      desc: "현재 계약이 정상 진행 중입니다.",
-      bg: "var(--primary-light)", border: "var(--primary-mid)", color: "var(--primary)",
-      tagBg: "var(--primary-light)", tagColor: "var(--primary)"
-    };
-  }
-  // 지점 확인 필요
-  if (status === "(세)과금완료" && !churned) {
-    return {
-      type: "check",
-      label: "🟡 지점 확인 필요",
-      desc: "과금이 완료되어 현재 해당 업체가 지점 세무사와 업무를 유지하고 있는지 확인이 필요합니다.",
-      bg: "var(--warn-light)", border: "#FBC878", color: "var(--warn)",
-      tagBg: "var(--warn-light)", tagColor: "var(--warn)"
-    };
-  }
-  // 계약 미완료
-  const INCOMPLETE_STATUSES = [
-    "(A타입)세무사배정","(세)배정-기장(지정)","(법)법인설립완료",
-    "(법)법인설립완료-유료","(법)사업자등록완료"
-  ];
-  if (INCOMPLETE_STATUSES.includes(status)) {
-    return {
-      type: "incomplete",
-      label: "🔵 계약 미완료",
-      desc: "해당 업체는 계약이 완료되지 않았습니다.",
-      bg: "#EEF3FF", border: "#99C5FF", color: "#185FA5",
-      tagBg: "#EEF3FF", tagColor: "#185FA5"
-    };
-  }
-  // 기타
-  return {
-    type: "unknown",
-    label: "❓ 확인 필요",
-    desc: `진행상황: ${status || "미기재"}`,
-    bg: "var(--card)", border: "var(--border)", color: "var(--text-sub)",
-    tagBg: "var(--gray-light)", tagColor: "var(--gray)"
-  };
-}
-
-function renderLookup(results, q) {
-  const el = $("lookupResults");
-  if (!results.length) {
-    el.innerHTML = `<div class="empty-state">"<strong>${q}</strong>" 에 해당하는 계약 이력이 없습니다.</div>`;
-    return;
-  }
-
-  // 분류별 집계
-  const classified = results.map(r => ({ ...r, cls: classifyContract(r) }));
-  const counts = { active:0, check:0, churn:0, incomplete:0, unknown:0 };
-  classified.forEach(r => counts[r.cls.type] = (counts[r.cls.type]||0) + 1);
-
-  // 정렬: 진행중 → 확인필요 → 미완료 → 이탈 → 기타
-  const ORDER = { active:0, check:1, incomplete:2, churn:3, unknown:4 };
-  classified.sort((a,b) => (ORDER[a.cls.type]||99) - (ORDER[b.cls.type]||99));
-
-  let html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;font-size:12px;">
-    <span style="color:var(--text-sub)">총 <strong style="color:var(--text)">${results.length}건</strong></span>
-    ${counts.active     ? `<span style="color:var(--primary)">· 진행 중 ${counts.active}건</span>` : ""}
-    ${counts.check      ? `<span style="color:var(--warn)">· 확인 필요 ${counts.check}건</span>` : ""}
-    ${counts.incomplete ? `<span style="color:#185FA5">· 미완료 ${counts.incomplete}건</span>` : ""}
-    ${counts.churn      ? `<span style="color:var(--danger)">· 이탈 ${counts.churn}건</span>` : ""}
-  </div>`;
-
-  classified.forEach(r => {
-    const c = r.cls;
-    const churnItems = Object.entries(r.churnDetail)
-      .filter(([,v]) => v)
-      .map(([k,v]) => `<span style="font-size:11px;background:var(--danger-light);color:var(--danger);padding:2px 8px;border-radius:20px;margin-right:4px">${k}: ${v}</span>`)
-      .join("");
-
-    html += `<div style="border:1.5px solid ${c.border};background:${c.bg};border-radius:var(--radius);padding:16px 18px;margin-bottom:10px;">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px;">
-        <div>
-          <div style="font-size:15px;font-weight:700;color:var(--text)">${r.company || "상호 미기재"}
-            <span style="font-size:11px;font-weight:700;background:${c.tagBg};color:${c.tagColor};padding:2px 10px;border-radius:20px;margin-left:6px">${c.label}</span>
-          </div>
-          <div style="font-size:12px;color:var(--text-sub);margin-top:3px">📞 ${r.phone || "-"}</div>
-        </div>
-        <div style="text-align:right;font-size:11px;color:var(--text-sub);flex-shrink:0;line-height:1.6;">
-          ${r.bizType  ? `<div>${r.bizType}</div>` : ""}
-          ${r.branch   ? `<div>${r.branch}</div>` : ""}
-        </div>
-      </div>
-      <div style="font-size:12px;color:${c.color};margin-bottom:6px;">${c.desc}</div>
-      <div style="display:flex;gap:14px;font-size:12px;color:var(--text-sub);flex-wrap:wrap;margin-bottom:${(r.churnReason||r.churnCategory||r.churnReasonLegacy||churnItems)?"6px":"0"}">
-        ${r.status       ? `<span>📋 <strong>${r.status}</strong></span>` : ""}
-        ${r.startMonth   ? `<span>📅 최초청구: ${r.startMonth}</span>` : ""}
-        ${r.contractDate ? `<span>🗓 계약일: ${r.contractDate}</span>` : ""}
-      </div>
-      ${(() => {
-        if (c.type !== "churn") return "";
-        // 이탈사유: 신규 필드 우선, 없으면 구 필드
-        const hasNew = r.churnReason || r.churnCategory;
-        if (hasNew) {
-          return `<div style="margin-top:4px;font-size:12px;">
-            ${r.churnCategory ? `<span style="background:#FAECE7;color:var(--danger);padding:2px 8px;border-radius:20px;font-weight:600;margin-right:6px">${r.churnCategory}</span>` : ""}
-            ${r.churnReason   ? `<span style="color:var(--danger);">${r.churnReason}</span>` : ""}
-          </div>`;
-        } else if (r.churnReasonLegacy) {
-          return `<div style="margin-top:4px;font-size:12px;color:var(--danger);">${r.churnReasonLegacy}</div>`;
-        }
-        return "";
-      })()}
-      ${churnItems ? `<div style="margin-top:6px">${churnItems}</div>` : ""}
-    </div>`;
-  });
-
-  el.innerHTML = html;
-}
 // ── 자동 갱신 (업무시간 9~19시, 30분 간격) ───────────────
 function scheduleAutoRefresh() {
   setInterval(() => {
@@ -2120,7 +1922,6 @@ function switchTab(name, btn) {
     else renderDailyTab();
     if (!Object.keys(PRE_DATES).length) loadDailyPre();
   }
-  if (name === "lookup") $("lookupInput").focus();
   if (name === "assign") {
     if (!ASSIGN_RECORDS.length) loadAssign().then(() => renderAssignTab());
     else renderAssignTab();
